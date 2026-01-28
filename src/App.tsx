@@ -34,7 +34,7 @@ function App() {
               key={todo.id}>{todo.content}
         </li>))}
       </ul>
-      <button onClick={signOut}>Sign out</button>
+      <button onClick={signOut} title={user?.signInDetails?.loginId || undefined}>Sign out</button>
     </main>
   );
 }
