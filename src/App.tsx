@@ -25,7 +25,8 @@ function App() {
 
   return (
     <main>
-      <h1>{user?.signInDetails?.loginId}'s todos</h1>
+      <h1>Global Healthy and Sustainable Cities</h1>
+      <h2>To do lists (to become a policy report generator)</h2>
       <button onClick={createTodo}>+ new</button>
       <ul>
         {todos.map((todo) => (<li 
