@@ -6,6 +6,8 @@ import type { Schema } from '../../amplify/data/resource';
 
 interface ReportsListProps {
   onUploadComplete: (fileName: string, fileSize: number, fileKey: string) => void;
+  client: ReturnType<typeof generateClient<Schema>> | null;
+  reports: Array<Schema["PolicyReport"]["type"]>;
 }
 
 const getStatusClass = (status: string) => {
@@ -26,18 +28,13 @@ const getStatusText = (status: string) => {
   }
 };
 
-export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete }) => {
-  const [reports, setReports] = useState<Array<Schema["PolicyReport"]["type"]>>([]);
+export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, client, reports }) => {
   const [selectedReport, setSelectedReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const client = generateClient<Schema>();
 
   useEffect(() => {
-    const subscription = client.models.PolicyReport.observeQuery().subscribe({
-      next: (data) => setReports([...data.items]),
-    });
-    return () => subscription.unsubscribe();
+    // No longer needed - reports come from props
   }, []);
 
   const handleFile = async (file: File) => {
@@ -115,6 +112,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete }) =>
   };
 
   const deleteReport = async (report: Schema["PolicyReport"]["type"]) => {
+    if (!client) return;
+    
     try {
       // Delete the database record - DynamoDB stream will trigger S3 cleanup
       await client.models.PolicyReport.delete({ id: report.id });
