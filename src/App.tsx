@@ -11,18 +11,30 @@ function App() {
   const { user, signOut } = useAuthenticator();
   const [reports, setReports] = useState<Array<Schema["PolicyReport"]["type"]>>([]);
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null);
-  const client = generateClient<Schema>();
+  const [client, setClient] = useState<ReturnType<typeof generateClient<Schema>> | null>(null);
 
   useEffect(() => {
-    client.models.PolicyReport.observeQuery().subscribe({
+    // Initialize client after component mounts to ensure Amplify is configured
+    const amplifyClient = generateClient<Schema>();
+    setClient(amplifyClient);
+  }, []);
+
+  useEffect(() => {
+    if (!client) return;
+    
+    const subscription = client.models.PolicyReport.observeQuery().subscribe({
       next: (data) => setReports([...data.items]),
     });
     
     // Sync S3 files with database on load
     syncWithS3();
-  }, []);
+    
+    return () => subscription.unsubscribe();
+  }, [client]);
 
   const syncWithS3 = async () => {
+    if (!client) return;
+    
     try {
       const [s3Files, dbReports] = await Promise.all([
         list({ options: { listAll: true } }),
@@ -55,6 +67,8 @@ function App() {
   };
 
   const handleUploadComplete = async (fileName: string, fileSize: number, fileKey: string) => {
+    if (!client) return;
+    
     try {
       // Create new report record
       await client.models.PolicyReport.create({
