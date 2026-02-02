@@ -4,8 +4,6 @@ import { getUrl } from 'aws-amplify/storage';
 import { uploadData } from 'aws-amplify/storage';
 import type { Schema } from '../../amplify/data/resource';
 
-const client = generateClient<Schema>();
-
 interface ReportsListProps {
   onUploadComplete: (fileName: string, fileSize: number, fileKey: string) => void;
 }
@@ -33,6 +31,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete }) =>
   const [selectedReport, setSelectedReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const client = generateClient<Schema>();
 
   useEffect(() => {
     const subscription = client.models.PolicyReport.observeQuery().subscribe({
@@ -52,11 +51,18 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete }) =>
       return;
     }
 
+    // Check for duplicate filename
+    const existingReport = reports.find(r => r.fileName === file.name);
+    if (existingReport) {
+      alert(`File "${file.name}" already exists. Please delete the existing report before uploading again.`);
+      return;
+    }
+
     setIsUploading(true);
     try {
-      // Generate secure random path (Amplify will automatically add user prefix)
+      // Generate secure random path in user's folder (Amplify automatically adds public/user-id/)
       const randomId = crypto.randomUUID();
-      const key = `uploads/${randomId}-${file.name}`;
+      const key = `${randomId}-${file.name}`;
       
       await uploadData({
         key,
@@ -65,6 +71,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete }) =>
           contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         }
       });
+      
+      // Trigger processing after successful upload
       onUploadComplete(file.name, file.size, key);
     } catch (error) {
       console.error('Upload failed:', error);
@@ -108,6 +116,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete }) =>
 
   const deleteReport = async (report: Schema["PolicyReport"]["type"]) => {
     try {
+      // Delete the database record - DynamoDB stream will trigger S3 cleanup
       await client.models.PolicyReport.delete({ id: report.id });
     } catch (error) {
       console.error('Failed to delete report:', error);

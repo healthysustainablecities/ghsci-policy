@@ -3,11 +3,11 @@ import { defineStorage } from '@aws-amplify/backend';
 export const storage = defineStorage({
   name: 'policyReportsStorage',
   access: (allow) => ({
-    'public/uploads/*': [
-      allow.authenticated.to(['read', 'write', 'delete'])
+    'private/uploads/*': [
+      allow.entity('identity').to(['read', 'write', 'delete', 'list'])
     ],
-    'public/reports/*': [
-      allow.authenticated.to(['read', 'write', 'delete'])
+    'private/reports/*': [
+      allow.entity('identity').to(['read', 'write', 'delete', 'list'])
     ]
   })
 });

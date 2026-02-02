@@ -3,21 +3,56 @@ import type { Schema } from "../amplify/data/resource";
 import { useAuthenticator } from '@aws-amplify/ui-react';
 import { Alert } from '@aws-amplify/ui-react';
 import { generateClient } from "aws-amplify/data";
+import { list } from 'aws-amplify/storage';
 import { ReportsList } from './components/ReportsList';
 import './styles.css';
-
-const client = generateClient<Schema>();
 
 function App() {
   const { user, signOut } = useAuthenticator();
   const [reports, setReports] = useState<Array<Schema["PolicyReport"]["type"]>>([]);
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null);
+  const client = generateClient<Schema>();
 
   useEffect(() => {
     client.models.PolicyReport.observeQuery().subscribe({
       next: (data) => setReports([...data.items]),
     });
+    
+    // Sync S3 files with database on load
+    syncWithS3();
   }, []);
+
+  const syncWithS3 = async () => {
+    try {
+      const [s3Files, dbReports] = await Promise.all([
+        list({ options: { listAll: true } }),
+        client.models.PolicyReport.list()
+      ]);
+
+      const xlsxFiles = s3Files.items.filter(f => f.key?.endsWith('.xlsx'));
+      const existingReports = dbReports.data || [];
+
+      // Create reports for S3 files without database records
+      for (const file of xlsxFiles) {
+        if (!file.key) continue;
+        
+        const fileName = file.key.split('-').slice(1).join('-'); // Remove UUID prefix
+        const existing = existingReports.find(r => r.fileKey === file.key);
+        
+        if (!existing) {
+          await client.models.PolicyReport.create({
+            fileName,
+            fileKey: file.key,
+            status: 'PROCESSING',
+            fileSize: file.size || 0,
+            uploadedAt: new Date().toISOString()
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to sync with S3:', error);
+    }
+  };
 
   const handleUploadComplete = async (fileName: string, fileSize: number, fileKey: string) => {
     try {
