@@ -7,11 +7,24 @@ specifies that any user authenticated via an API key can "create", "read",
 "update", and "delete" any "Todo" records.
 =========================================================================*/
 const schema = a.schema({
-  Todo: a
+  PolicyReport: a
     .model({
-      content: a.string(),
+      fileName: a.string().required(),
+      fileKey: a.string(), // S3 key for uploaded file
+      status: a.enum(['UPLOADING', 'PROCESSING', 'COMPLETED', 'FAILED']),
+      pdfUrl: a.string(),
+      reportTitle: a.string(),
+      collectionDetails: a.string(),
+      policyChecklist: a.string(),
+      fileSize: a.integer().required(),
+      errorMessage: a.string(),
+      uploadedAt: a.datetime(),
+      processedAt: a.datetime(),
+      completedAt: a.datetime(),
     })
-    .authorization((allow) => [allow.owner()]),
+    .authorization((allow) => [
+      allow.owner()
+    ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
