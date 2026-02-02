@@ -1,8 +1,12 @@
 import { defineFunction } from '@aws-amplify/backend';
-import { Function, Runtime, Code } from 'aws-cdk-lib/aws-lambda';
-import { Duration } from 'aws-cdk-lib';
 
 export const processReport = defineFunction({
   name: 'process-policy-report',
-  entry: './handler.ts'
+  entry: './handler.py',
+  runtime: 20,
+  environment: {
+    STORAGE_BUCKET_NAME: process.env.STORAGE_BUCKET_NAME || '',
+    GRAPHQL_ENDPOINT: process.env.GRAPHQL_ENDPOINT || ''
+  },
+  timeoutSeconds: 300
 });

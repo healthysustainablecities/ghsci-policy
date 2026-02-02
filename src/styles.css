@@ -43,6 +43,7 @@
 .btn-secondary {
   background-color: #6c757d;
   color: white;
+  margin-top: 2em;
   padding: 8px 16px;
   font-size: 14px;
 }
@@ -240,4 +241,70 @@
 
 .upload-thumbnail div {
   max-width: 200px;
+}
+
+/* Reports list */
+.reports-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.report-item {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.report-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.status.uploading {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status.processing {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+
+.status.completed {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status.failed {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.report-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #666;
+}
+
+.report-meta a {
+  color: #007bff;
+  text-decoration: none;
+}
+
+.report-meta a:hover {
+  text-decoration: underline;
 }
