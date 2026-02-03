@@ -2,7 +2,7 @@ import { Function, Runtime, Code } from 'aws-cdk-lib/aws-lambda';
 import { Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 
-export const createCleanupPolicyFilesFunction = (scope: Construct, bucketName: string) => {
+export const createCleanupPolicyFilesFunctionHandler = (scope: Construct, bucketName: string) => {
   return new Function(scope, 'CleanupPolicyFiles', {
     runtime: Runtime.PYTHON_3_11,
     handler: 'handler.handler',

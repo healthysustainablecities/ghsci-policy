@@ -28,7 +28,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
 
     setIsUploading(true);
     try {
-      const key = `uploads/${file.name}`;
+      const key = `uploads/${user.username}/${file.name}`;
       await uploadData({
         key,
         data: file,
