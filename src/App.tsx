@@ -4,6 +4,7 @@ import './styles.css';
 
 function App() {
   const { user, signOut } = useAuthenticator();
+
   return (
     <main className="main-container">
       <header className="header">
@@ -18,11 +19,9 @@ function App() {
       <div>
         <h3>Upload Report</h3>
         <FileUploader
-          acceptedFileTypes={['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']}
-          path="uploads/"
+          acceptedFileTypes={['.xlsx']}
+          path="public/"
           maxFileCount={1}
-          maxFileSize={1024 * 1024} // 1MB
-          isResumable
           onUploadSuccess={({ key }) => {
             console.log('Upload success:', key);
           }}
