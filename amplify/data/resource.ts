@@ -21,7 +21,6 @@ const schema = a.schema({
       uploadedAt: a.datetime(),
       processedAt: a.datetime(),
       completedAt: a.datetime(),
-      owner: a.string().authorization((allow) => [allow.owner().to(['read'])])
     })
     .authorization((allow) => [
       allow.owner()

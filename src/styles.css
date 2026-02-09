@@ -102,7 +102,7 @@
 }
 
 .report-thumbnail {
-  height: 120px;
+  height: 180px; /* Matched to upload card for consistency */
   background-color: #e9ecef;
   border-radius: 4px;
   display: flex;
@@ -228,7 +228,7 @@
 }
 
 .upload-thumbnail {
-  height: 120px;
+  height: 180px; /* Increased for portrait aspect */
   display: flex;
   align-items: center;
   justify-content: center;

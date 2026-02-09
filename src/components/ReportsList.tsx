@@ -6,6 +6,7 @@ import type { Schema } from '../../amplify/data/resource';
 
 interface ReportsListProps {
   onUploadComplete: (fileName: string, fileSize: number, fileKey: string) => void;
+  onDeleteReport: (report: Schema["PolicyReport"]["type"]) => void;
   client: ReturnType<typeof generateClient<Schema>> | null;
   reports: Array<Schema["PolicyReport"]["type"]>;
 }
@@ -28,7 +29,7 @@ const getStatusText = (status: string) => {
   }
 };
 
-export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, client, reports }) => {
+export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDeleteReport, client, reports }) => {
   const [selectedReport, setSelectedReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -111,18 +112,6 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, clie
     }
   };
 
-  const deleteReport = async (report: Schema["PolicyReport"]["type"]) => {
-    if (!client) return;
-    
-    try {
-      // Delete the database record - DynamoDB stream will trigger S3 cleanup
-      await client.models.PolicyReport.delete({ id: report.id });
-    } catch (error) {
-      console.error('Failed to delete report:', error);
-      alert('Failed to delete report. Please try again.');
-    }
-  };
-
   return (
     <>
       <div className="reports-grid">
@@ -166,7 +155,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, clie
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  deleteReport(report);
+                  onDeleteReport(report);
                 }}
                 className="btn btn-danger delete-btn"
                 title="Delete report"

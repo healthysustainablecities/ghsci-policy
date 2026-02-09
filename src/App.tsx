@@ -1,9 +1,111 @@
 import { useAuthenticator } from '@aws-amplify/ui-react';
-import { FileUploader } from '@aws-amplify/ui-react-storage';
+import { useEffect, useState } from 'react';
+import { generateClient } from 'aws-amplify/data';
+import { remove } from 'aws-amplify/storage';
+import type { Schema } from '../amplify/data/resource';
+import { ReportsList } from './components/ReportsList';
 import './styles.css';
+
+const client = generateClient<Schema>();
 
 function App() {
   const { user, signOut } = useAuthenticator();
+  const [reports, setReports] = useState<Array<Schema["PolicyReport"]["type"]>>([]);
+
+  useEffect(() => {
+    // Fetch user's reports on mount
+    fetchReports();
+
+    // Subscribe to real-time updates
+    const subscription = client.models.PolicyReport.observeQuery().subscribe({
+      next: ({ items }) => {
+        setReports([...items].sort((a, b) => 
+          new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
+        ));
+      },
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchReports = async () => {
+    try {
+      const { data } = await client.models.PolicyReport.list();
+      setReports([...data].sort((a, b) => 
+        new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
+      ));
+    } catch (error) {
+      console.error('Failed to fetch reports:', error);
+    }
+  };
+
+  const handleUploadComplete = async (fileName: string, fileSize: number, fileKey: string) => {
+    try {
+      // Don't set owner explicitly - let Amplify handle it automatically
+      // The allow.owner() at the model level should auto-populate this
+      const result = await client.models.PolicyReport.create({
+        fileName,
+        fileSize,
+        fileKey,
+        status: 'PROCESSING',
+        uploadedAt: new Date().toISOString(),
+      });
+      
+      // console.log('Created report:', result);
+    } catch (error) {
+      console.error('Failed to create report record:', error);
+    }
+  };
+
+  const handleDeleteReport = async (report: Schema["PolicyReport"]["type"]) => {
+    console.log('Attempting to delete report:', {
+      id: report.id,
+      fileName: report.fileName,
+      owner: report.owner,
+      currentUser: user?.username,
+      userDetails: user
+    });
+    
+    // Optimistically remove from UI
+    const previousReports = [...reports];
+    setReports(reports.filter(r => r.id !== report.id));
+    
+    try {
+      // Delete S3 files first
+      if (report.fileKey) {
+        try {
+          await remove({ key: report.fileKey });
+          // console.log('Deleted Excel file:', report.fileKey);
+        } catch (err) {
+          console.error('Failed to delete Excel file:', err);
+        }
+      }
+      
+      if (report.pdfUrl) {
+        try {
+          await remove({ key: report.pdfUrl });
+          // console.log('Deleted PDF file:', report.pdfUrl);
+        } catch (err) {
+          console.error('Failed to delete PDF file:', err);
+        }
+      }
+      
+      // Delete from database
+      const { data, errors } = await client.models.PolicyReport.delete({ id: report.id });
+      
+      if (errors && errors.length > 0) {
+        console.error('Database deletion errors:', errors);
+        throw new Error(`Failed to delete from database: ${errors.map(e => e.message).join(', ')}`);
+      }
+      
+      // console.log('Deleted database record:', report.id, data);
+    } catch (error) {
+      console.error('Failed to delete report:', error);
+      alert(`Failed to delete report: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Rollback on error
+      setReports(previousReports);
+    }
+  };
 
   return (
     <main className="main-container">
@@ -17,17 +119,14 @@ function App() {
         </button>
       </header>
       <div>
-        <h3>Upload Report</h3>
-        <FileUploader
-          acceptedFileTypes={['.xlsx']}
-          path="public/"
-          maxFileCount={1}
-          onUploadSuccess={({ key }) => {
-            console.log('Upload success:', key);
-          }}
-          onUploadError={(error) => {
-            console.error('Upload error:', error);
-          }}
+        <h3>Completed checklists</h3>
+        <div><i>(Ignore the status of uploaded items; processing is not yet enabled!)</i></div>
+        <br/>
+        <ReportsList 
+          onUploadComplete={handleUploadComplete}
+          onDeleteReport={handleDeleteReport}
+          client={client}
+          reports={reports}
         />
       </div>
     </main>
