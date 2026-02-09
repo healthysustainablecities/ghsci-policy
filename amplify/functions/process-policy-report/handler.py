@@ -1,7 +1,12 @@
+import sys
+import os
+
+# Add lib directory to path for local dependencies
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'lib'))
+
 import boto3
 import json
 import pandas as pd
-import os
 from urllib.parse import unquote_plus
 from datetime import datetime
 from fpdf import FPDF
@@ -18,7 +23,7 @@ def handler(event, context):
     # 1. Extract bucket and key from the S3 event
     bucket = event['Records'][0]['s3']['bucket']['name']
     key = unquote_plus(event['Records'][0]['s3']['object']['key'])
-    
+
     try:
         process_report(bucket, key)
         return {
@@ -32,7 +37,7 @@ def handler(event, context):
             update_report_status(key, 'FAILED', error_message=str(e))
         except Exception as update_error:
             print(f"Failed to update status: {str(update_error)}")
-        
+
         return {
             'statusCode': 500,
             'body': json.dumps({
@@ -51,25 +56,25 @@ def get_table():
 def update_report_status(file_key, status, pdf_url=None, error_message=None):
     """Update the PolicyReport record in DynamoDB"""
     table = get_table()
-    
+
     # Query to find the record by fileKey
     response = table.scan(
         FilterExpression='fileKey = :fk',
         ExpressionAttributeValues={':fk': file_key}
     )
-    
+
     if not response.get('Items'):
         print(f"No record found for fileKey: {file_key}")
         return
-    
+
     item = response['Items'][0]
     record_id = item['id']
-    
+
     # Build update expression
     update_expr = 'SET #status = :status'
     expr_names = {'#status': 'status'}
     expr_values = {':status': status}
-    
+
     if status == 'PROCESSING':
         update_expr += ', processedAt = :processedAt'
         expr_values[':processedAt'] = datetime.utcnow().isoformat()
@@ -83,7 +88,7 @@ def update_report_status(file_key, status, pdf_url=None, error_message=None):
         if error_message:
             update_expr += ', errorMessage = :errorMessage'
             expr_values[':errorMessage'] = error_message
-    
+
     # Update the record
     table.update_item(
         Key={'id': record_id},
@@ -97,10 +102,10 @@ def process_report(bucket, key):
     """
     Download file from S3, process and upload report
     """
-    
+
     # Update status to PROCESSING
     update_report_status(key, 'PROCESSING')
-    
+
     # 2. Parse the pattern: public/{user_id}/{object_key}
     try:
         parts = key.split('/')
@@ -115,15 +120,15 @@ def process_report(bucket, key):
     output_pdf_name = f'{file_basename}.pdf'
     pdf_local_path = f'/tmp/{output_pdf_name}'
     upload_key = f'public/{user_id}/reports/{output_pdf_name}'
-    
+
     print(f"Processing file: {key} from bucket: {bucket}")
-    
+
     # 1. Download the Excel file from S3
     s3_client.download_file(bucket, key, download_path)
-    
+
     # 2. Process it to extract policy data
     df = pd.read_excel(download_path, sheet_name='Policy Checklist')
-    
+
     # 3. Generate PDF report
     pdf = FPDF()
     pdf.add_page()
@@ -132,14 +137,14 @@ def process_report(bucket, key):
     for _, row in df.iterrows():
         pdf.cell(200, 10, txt=str(row.to_dict()), ln=True)
     pdf.output(pdf_local_path)
-    
+
     # 4. Upload PDF back to S3
     s3_client.upload_file(
         pdf_local_path, 
         bucket, 
         upload_key
     )
-    
+
     # 5. Update database record with COMPLETED status
     update_report_status(key, 'COMPLETED', pdf_url=upload_key)
 

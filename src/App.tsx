@@ -42,7 +42,7 @@ function App() {
   const handleUploadComplete = async (fileName: string, fileSize: number, fileKey: string) => {
     try {
       // Create record with UPLOADING status - Lambda will update to PROCESSING
-      const result = await client.models.PolicyReport.create({
+      await client.models.PolicyReport.create({
         fileName,
         fileSize,
         fileKey,
@@ -50,7 +50,7 @@ function App() {
         uploadedAt: new Date().toISOString(),
       });
       
-      console.log('Created report record:', result);
+      // console.log('Created report record:', result);
     } catch (error) {
       console.error('Failed to create report record:', error);
       alert('Failed to create report record. The file was uploaded but may not be processed.');
@@ -91,7 +91,7 @@ function App() {
       }
       
       // Delete from database
-      const { data, errors } = await client.models.PolicyReport.delete({ id: report.id });
+      const { errors } = await client.models.PolicyReport.delete({ id: report.id });
       
       if (errors && errors.length > 0) {
         console.error('Database deletion errors:', errors);

@@ -31,7 +31,7 @@ const getStatusText = (status: string) => {
   }
 };
 
-export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDeleteReport, client, reports }) => {
+export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDeleteReport, reports }) => {
   const [selectedReport, setSelectedReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);

@@ -5,14 +5,9 @@ import { storage } from './storage/resource';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import { S3EventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import { EventType } from 'aws-cdk-lib/aws-s3';
-import * as path from "node:path";
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-import { fileURLToPath } from "node:url";
-import * as iam from 'aws-cdk-lib/aws-iam';
-import { defineFunction } from "@aws-amplify/backend";
-import { CfnOutput, DockerImage, Duration } from "aws-cdk-lib";
-import { Code, Function, Runtime } from "aws-cdk-lib/aws-lambda";
-import { Bucket } from "aws-cdk-lib/aws-s3";
+import { Function, Runtime, Code } from 'aws-cdk-lib/aws-lambda';
+import { Duration } from 'aws-cdk-lib';
+import { Bucket } from 'aws-cdk-lib/aws-s3';
 
 const backend = defineBackend({
   auth,
@@ -20,7 +15,20 @@ const backend = defineBackend({
   storage,
 });
 
-const customResourceStack = backend.createStack('GHSCIPolicyStack');
+// Create Python Lambda in the data stack (which already depends on storage)
+const dataStack = backend.data.resources.cfnResources.cfnGraphqlApi.stack;
+
+// Create Python Lambda without Docker bundling - using local lib folder
+const processReportFunctionHandler = new Function(dataStack, 'ProcessPolicyReport', {
+  runtime: Runtime.PYTHON_3_13,
+  handler: 'handler.handler',
+  code: Code.fromAsset('amplify/functions/process-policy-report'),
+  timeout: Duration.seconds(300),
+  environment: {
+    STORAGE_BUCKET: backend.storage.resources.bucket.bucketName,
+    POLICY_REPORT_TABLE: backend.data.resources.tables['PolicyReport'].tableName,
+  },
+});
 
 // Add S3 permissions using wildcard to avoid circular dependency
 backend.auth.resources.authenticatedUserIamRole.addToPrincipalPolicy(
@@ -31,37 +39,18 @@ backend.auth.resources.authenticatedUserIamRole.addToPrincipalPolicy(
   })
 );
 
-const processReportFunctionHandler = new lambda.Function(customResourceStack, 'process-policy-report', {
-      handler: "handler.handler",
-      runtime: Runtime.PYTHON_3_13,
-      timeout: Duration.seconds(300),
-      code: Code.fromAsset('amplify/functions/process-policy-report', {
-        bundling: {
-          image: DockerImage.fromRegistry("python:3.13-slim"),
-          command: [
-            '/bin/sh', '-c',
-            'pip install -r requirements.txt -t /asset-output && cp *.py /asset-output/'
-          ],
-          user: 'root',
-        },
-      }),
-      environment: {
-        STORAGE_BUCKET: backend.storage.resources.bucket.bucketName,
-        POLICY_REPORT_TABLE: backend.data.resources.tables['PolicyReport'].tableName,
-      },
-    }
-);
+// Grant Lambda permissions to access S3 bucket
+const s3Bucket = backend.storage.resources.bucket;
+s3Bucket.grantReadWrite(processReportFunctionHandler);
 
-processReportFunctionHandler.addPermission('AllowAuthenticatedUserInvoke', {
-  principal: new iam.ServicePrincipal('lambda.amazonaws.com'),
-  action: 'lambda:InvokeFunction',
-  sourceArn: backend.auth.resources.authenticatedUserIamRole.roleArn,
-})
+// Grant Lambda permissions to update DynamoDB table
+backend.data.resources.tables['PolicyReport'].grantReadWriteData(
+  processReportFunctionHandler
+);
 
 // Set up S3 event notification to trigger Lambda on .xlsx uploads
 processReportFunctionHandler.addEventSource(
-  new S3EventSource( 
-    backend.storage.resources.bucket as Bucket, {
+  new S3EventSource(s3Bucket as Bucket, {
     events: [EventType.OBJECT_CREATED],
     filters: [{ suffix: '.xlsx' }],
   })
