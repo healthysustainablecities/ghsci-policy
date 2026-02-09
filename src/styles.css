@@ -138,6 +138,10 @@
   font-weight: bold;
 }
 
+.status-uploading {
+  background-color: #17a2b8;
+}
+
 .status-processing {
   background-color: #ffc107;
 }

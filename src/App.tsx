@@ -41,19 +41,19 @@ function App() {
 
   const handleUploadComplete = async (fileName: string, fileSize: number, fileKey: string) => {
     try {
-      // Don't set owner explicitly - let Amplify handle it automatically
-      // The allow.owner() at the model level should auto-populate this
+      // Create record with UPLOADING status - Lambda will update to PROCESSING
       const result = await client.models.PolicyReport.create({
         fileName,
         fileSize,
         fileKey,
-        status: 'PROCESSING',
+        status: 'UPLOADING',
         uploadedAt: new Date().toISOString(),
       });
       
-      // console.log('Created report:', result);
+      console.log('Created report record:', result);
     } catch (error) {
       console.error('Failed to create report record:', error);
+      alert('Failed to create report record. The file was uploaded but may not be processed.');
     }
   };
 
@@ -120,8 +120,6 @@ function App() {
       </header>
       <div>
         <h3>Completed checklists</h3>
-        <div><i>(Ignore the status of uploaded items; processing is not yet enabled!)</i></div>
-        <br/>
         <ReportsList 
           onUploadComplete={handleUploadComplete}
           onDeleteReport={handleDeleteReport}

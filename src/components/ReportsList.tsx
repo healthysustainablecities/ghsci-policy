@@ -13,6 +13,7 @@ interface ReportsListProps {
 
 const getStatusClass = (status: string) => {
   switch (status) {
+    case 'UPLOADING': return 'status-uploading';
     case 'PROCESSING': return 'status-processing';
     case 'COMPLETED': return 'status-completed';
     case 'FAILED': return 'status-failed';
@@ -22,6 +23,7 @@ const getStatusClass = (status: string) => {
 
 const getStatusText = (status: string) => {
   switch (status) {
+    case 'UPLOADING': return 'Uploaded';
     case 'PROCESSING': return 'Processing...';
     case 'COMPLETED': return 'Completed';
     case 'FAILED': return 'Failed';
@@ -210,6 +212,23 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             )}
             
             <div className="modal-footer">
+              {selectedReport.status === 'COMPLETED' && selectedReport.pdfUrl && (
+                <button 
+                  onClick={async () => {
+                    try {
+                      const signedUrl = await getUrl({ key: selectedReport.pdfUrl! });
+                      window.open(signedUrl.url.toString(), '_blank');
+                    } catch (error) {
+                      console.error('Failed to open PDF:', error);
+                      alert('Failed to open PDF report');
+                    }
+                  }}
+                  className="btn btn-primary"
+                  style={{ marginRight: '10px' }}
+                >
+                  View PDF Report
+                </button>
+              )}
               <button 
                 onClick={() => setSelectedReport(null)}
                 className="btn btn-secondary"
