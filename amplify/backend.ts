@@ -3,8 +3,8 @@ import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
-import { S3EventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import { EventType } from 'aws-cdk-lib/aws-s3';
+import * as aws_s3_notifications from 'aws-cdk-lib/aws-s3-notifications';
 import { Function, Runtime, Code } from 'aws-cdk-lib/aws-lambda';
 import { Duration } from 'aws-cdk-lib';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
@@ -15,11 +15,11 @@ const backend = defineBackend({
   storage,
 });
 
-// Create Python Lambda in the data stack (which already depends on storage)
-const dataStack = backend.data.resources.cfnResources.cfnGraphqlApi.stack;
+// Get storage stack to add Lambda there
+const storageStack = backend.storage.resources.bucket.stack;
 
-// Create Python Lambda without Docker bundling - using local lib folder
-const processReportFunctionHandler = new Function(dataStack, 'ProcessPolicyReport', {
+// Create Python Lambda in storage stack to avoid circular dependency
+const processReportFunctionHandler = new Function(storageStack, 'ProcessPolicyReport', {
   runtime: Runtime.PYTHON_3_13,
   handler: 'handler.handler',
   code: Code.fromAsset('amplify/functions/process-policy-report'),
@@ -48,10 +48,9 @@ backend.data.resources.tables['PolicyReport'].grantReadWriteData(
   processReportFunctionHandler
 );
 
-// Set up S3 event notification to trigger Lambda on .xlsx uploads
-processReportFunctionHandler.addEventSource(
-  new S3EventSource(s3Bucket as Bucket, {
-    events: [EventType.OBJECT_CREATED],
-    filters: [{ suffix: '.xlsx' }],
-  })
+// Set up S3 event notification from the bucket side (not Lambda side) to avoid circular dependency
+s3Bucket.addEventNotification(
+  EventType.OBJECT_CREATED,
+  new aws_s3_notifications.LambdaDestination(processReportFunctionHandler),
+  { suffix: '.xlsx' }
 );

@@ -58,13 +58,13 @@ function App() {
   };
 
   const handleDeleteReport = async (report: Schema["PolicyReport"]["type"]) => {
-    console.log('Attempting to delete report:', {
-      id: report.id,
-      fileName: report.fileName,
-      owner: report.owner,
-      currentUser: user?.username,
-      userDetails: user
-    });
+    // console.log('Attempting to delete report:', {
+    //   id: report.id,
+    //   fileName: report.fileName,
+    //   owner: report.owner,
+    //   currentUser: user?.username,
+    //   userDetails: user
+    // });
     
     // Optimistically remove from UI
     const previousReports = [...reports];
