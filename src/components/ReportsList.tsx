@@ -51,8 +51,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
       return;
     }
 
-    // Check for duplicate filename
-    const existingReport = reports.find(r => r.fileName === file.name);
+    // Check for duplicate filename (filter out null records from deserialization errors)
+    const existingReport = reports.filter(r => r !== null).find(r => r.fileName === file.name);
     if (existingReport) {
       alert(`File "${file.name}" already exists. Please delete the existing report before uploading again.`);
       return;
@@ -143,7 +143,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
         </div>
 
         {/* Existing reports */}
-        {reports.map((report) => (
+        {reports.filter(report => report !== null).map((report) => (
           <div
             key={report.id}
             onClick={() => openReport(report)}

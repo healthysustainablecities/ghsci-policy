@@ -55,72 +55,115 @@ def get_table():
 
 def update_report_status(file_key, status, pdf_url=None, error_message=None):
     """Update the PolicyReport record in DynamoDB"""
-    table = get_table()
+    try:
+        table = get_table()
+        
+        # Extract just the filename from S3 key (removes public/{user-id}/ prefix)
+        # S3 key format: public/{user-id}/{uuid}-{filename}
+        # Database stores: {uuid}-{filename}
+        search_key = file_key.split('/')[-1]  # Get last part after final /
+        
+        print(f"S3 fileKey: {file_key}")
+        print(f"Searching database for: {search_key}")
 
-    # Query to find the record by fileKey
-    response = table.scan(
-        FilterExpression='fileKey = :fk',
-        ExpressionAttributeValues={':fk': file_key}
-    )
+        # Find the record by matching the filename portion
+        response = table.scan(
+            FilterExpression='fileKey = :fk',
+            ExpressionAttributeValues={':fk': search_key}
+        )
+        
+        print(f"Scan response: {response}")
 
-    if not response.get('Items'):
-        print(f"No record found for fileKey: {file_key}")
-        return
+        if not response.get('Items'):
+            print(f"No record found for fileKey: {file_key}")
+            return
 
-    item = response['Items'][0]
-    record_id = item['id']
+        item = response['Items'][0]
+        record_id = item['id']
+        
+        print(f"Found record: {record_id}")
 
-    # Build update expression
-    update_expr = 'SET #status = :status'
-    expr_names = {'#status': 'status'}
-    expr_values = {':status': status}
+        # Build update expression
+        update_expr = 'SET #status = :status, updatedAt = :updatedAt'
+        expr_names = {'#status': 'status'}
+        
+        # Format datetime for AWS Amplify (ISO 8601 with milliseconds and Z)
+        now = datetime.utcnow()
+        aws_datetime = now.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'  # Trim to milliseconds and add Z
+        
+        expr_values = {
+            ':status': status,
+            ':updatedAt': aws_datetime
+        }
 
-    if status == 'PROCESSING':
-        update_expr += ', processedAt = :processedAt'
-        expr_values[':processedAt'] = datetime.utcnow().isoformat()
-    elif status == 'COMPLETED':
-        update_expr += ', completedAt = :completedAt'
-        expr_values[':completedAt'] = datetime.utcnow().isoformat()
-        if pdf_url:
-            update_expr += ', pdfUrl = :pdfUrl'
-            expr_values[':pdfUrl'] = pdf_url
-    elif status == 'FAILED':
-        if error_message:
-            update_expr += ', errorMessage = :errorMessage'
-            expr_values[':errorMessage'] = error_message
+        if status == 'PROCESSING':
+            update_expr += ', processedAt = :processedAt'
+            expr_values[':processedAt'] = aws_datetime
+        elif status == 'COMPLETED':
+            update_expr += ', completedAt = :completedAt'
+            expr_values[':completedAt'] = aws_datetime
+            if pdf_url:
+                update_expr += ', pdfUrl = :pdfUrl'
+                expr_values[':pdfUrl'] = pdf_url
+        elif status == 'FAILED':
+            if error_message:
+                update_expr += ', errorMessage = :errorMessage'
+                expr_values[':errorMessage'] = error_message
 
-    # Update the record
-    table.update_item(
-        Key={'id': record_id},
-        UpdateExpression=update_expr,
-        ExpressionAttributeNames=expr_names,
-        ExpressionAttributeValues=expr_values
-    )
-    print(f"Updated record {record_id} to status {status}")
+        # Update the record
+        print(f"Updating with expression: {update_expr}")
+        print(f"Values: {expr_values}")
+        
+        update_response = table.update_item(
+            Key={'id': record_id},
+            UpdateExpression=update_expr,
+            ExpressionAttributeNames=expr_names,
+            ExpressionAttributeValues=expr_values,
+            ReturnValues='ALL_NEW'
+        )
+        
+        print(f"Update response: {update_response}")
+        print(f"Successfully updated record {record_id} to status {status}")
+        
+    except Exception as e:
+        print(f"Error updating status: {str(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        raise
 
 def process_report(bucket, key):
     """
     Download file from S3, process and upload report
     """
+    
+    print(f"Starting to process: {key}")
 
     # Update status to PROCESSING
     update_report_status(key, 'PROCESSING')
 
-    # 2. Parse the pattern: public/{user_id}/{object_key}
+    # 2. Parse the S3 key - format is public/{uuid}-{filename}.xlsx
     try:
         parts = key.split('/')
-        user_id = parts[1]  # user_id is at index 1
-        filename = parts[-1]
-        file_basename = os.path.splitext(filename)[0]
+        print(f"Key parts: {parts}")
+        print(f"Number of parts: {len(parts)}")
+        
+        # Get the filename (last part of the path)
+        filename = parts[-1]  # uuid-filename.xlsx
+        file_basename = os.path.splitext(filename)[0]  # uuid-filename (without .xlsx)
+        
+        print(f"Filename: {filename}")
+        print(f"Basename: {file_basename}")
     except Exception as e:
-        raise ValueError(f"Invalid key pattern: {e}") 
+        raise ValueError(f"Failed to parse key: {e}") 
 
     # 3. Define local and remote paths
     download_path = f'/tmp/{filename}'
     output_pdf_name = f'{file_basename}.pdf'
     pdf_local_path = f'/tmp/{output_pdf_name}'
-    upload_key = f'public/{user_id}/reports/{output_pdf_name}'
-
+    # Upload PDF to public/reports/ folder
+    upload_key = f'public/reports/{output_pdf_name}'
+    
+    print(f"Will upload PDF to: {upload_key}")
     print(f"Processing file: {key} from bucket: {bucket}")
 
     # 1. Download the Excel file from S3
@@ -129,13 +172,27 @@ def process_report(bucket, key):
     # 2. Process it to extract policy data
     df = pd.read_excel(download_path, sheet_name='Policy Checklist')
 
-    # 3. Generate PDF report
+    # 3. Generate PDF report with Unicode support
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", size=12)
+    pdf.set_font("Helvetica", size=12)
+    
     pdf.cell(200, 10, txt="Policy Report", ln=True)
+    
+    # Convert DataFrame rows to text, sanitizing Unicode characters
     for _, row in df.iterrows():
-        pdf.cell(200, 10, txt=str(row.to_dict()), ln=True)
+        row_text = str(row.to_dict())
+        # Replace smart quotes and other Unicode chars with ASCII equivalents
+        replacements = {
+            ''': "'", ''': "'", '"': '"', '"': '"', 
+            '–': '-', '—': '-', '…': '...'
+        }
+        for old, new in replacements.items():
+            row_text = row_text.replace(old, new)
+        # Remove any remaining non-ASCII characters
+        row_text = row_text.encode('ascii', 'replace').decode('ascii')
+        pdf.cell(200, 10, txt=row_text, ln=True)
+    
     pdf.output(pdf_local_path)
 
     # 4. Upload PDF back to S3

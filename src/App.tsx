@@ -19,14 +19,41 @@ function App() {
     // Subscribe to real-time updates
     const subscription = client.models.PolicyReport.observeQuery().subscribe({
       next: ({ items }) => {
+        console.log('Subscription update received:', items.length, 'items');
+        items.forEach(item => {
+          console.log('  - Item:', item?.fileName, 'Status:', item?.status);
+        });
         setReports([...items].sort((a, b) => 
           new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
         ));
       },
+      error: (error) => {
+        console.error('Subscription error:', error);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Poll for updates when reports are processing
+  useEffect(() => {
+    const hasProcessingReports = reports.some(r => r?.status === 'PROCESSING');
+    
+    if (!hasProcessingReports) {
+      return; // No polling needed
+    }
+
+    console.log('Starting polling for processing reports...');
+    const pollInterval = setInterval(() => {
+      console.log('Polling for updates...');
+      fetchReports();
+    }, 5000); // Poll every 5 seconds
+
+    return () => {
+      console.log('Stopping polling');
+      clearInterval(pollInterval);
+    };
+  }, [reports]);
 
   const fetchReports = async () => {
     try {
@@ -41,16 +68,16 @@ function App() {
 
   const handleUploadComplete = async (fileName: string, fileSize: number, fileKey: string) => {
     try {
-      // Create record with UPLOADING status - Lambda will update to PROCESSING
-      await client.models.PolicyReport.create({
+      // Create record with PROCESSING status since Lambda triggers immediately
+      const result = await client.models.PolicyReport.create({
         fileName,
         fileSize,
         fileKey,
-        status: 'UPLOADING',
+        status: 'PROCESSING',
         uploadedAt: new Date().toISOString(),
       });
       
-      // console.log('Created report record:', result);
+      console.log('Created report record:', result);
     } catch (error) {
       console.error('Failed to create report record:', error);
       alert('Failed to create report record. The file was uploaded but may not be processed.');
@@ -58,13 +85,13 @@ function App() {
   };
 
   const handleDeleteReport = async (report: Schema["PolicyReport"]["type"]) => {
-    // console.log('Attempting to delete report:', {
-    //   id: report.id,
-    //   fileName: report.fileName,
-    //   owner: report.owner,
-    //   currentUser: user?.username,
-    //   userDetails: user
-    // });
+    console.log('Attempting to delete report:', {
+      id: report.id,
+      fileName: report.fileName,
+      owner: report.owner,
+      currentUser: user?.username,
+      userDetails: user
+    });
     
     // Optimistically remove from UI
     const previousReports = [...reports];
@@ -75,7 +102,7 @@ function App() {
       if (report.fileKey) {
         try {
           await remove({ key: report.fileKey });
-          // console.log('Deleted Excel file:', report.fileKey);
+          console.log('Deleted Excel file:', report.fileKey);
         } catch (err) {
           console.error('Failed to delete Excel file:', err);
         }
@@ -84,21 +111,21 @@ function App() {
       if (report.pdfUrl) {
         try {
           await remove({ key: report.pdfUrl });
-          // console.log('Deleted PDF file:', report.pdfUrl);
+          console.log('Deleted PDF file:', report.pdfUrl);
         } catch (err) {
           console.error('Failed to delete PDF file:', err);
         }
       }
       
       // Delete from database
-      const { errors } = await client.models.PolicyReport.delete({ id: report.id });
+      const { data, errors } = await client.models.PolicyReport.delete({ id: report.id });
       
       if (errors && errors.length > 0) {
         console.error('Database deletion errors:', errors);
         throw new Error(`Failed to delete from database: ${errors.map(e => e.message).join(', ')}`);
       }
       
-      // console.log('Deleted database record:', report.id, data);
+      console.log('Deleted database record:', report.id, data);
     } catch (error) {
       console.error('Failed to delete report:', error);
       alert(`Failed to delete report: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -120,6 +147,8 @@ function App() {
       </header>
       <div>
         <h3>Completed checklists</h3>
+        <div><i>(Report processing is in development and likely does not yet work!)</i></div>
+        <br/>
         <ReportsList 
           onUploadComplete={handleUploadComplete}
           onDeleteReport={handleDeleteReport}

@@ -24,6 +24,7 @@ const processReportFunctionHandler = new Function(storageStack, 'ProcessPolicyRe
   handler: 'handler.handler',
   code: Code.fromAsset('amplify/functions/process-policy-report'),
   timeout: Duration.seconds(300),
+  memorySize: 1024, // Increase memory for pandas/fpdf processing
   environment: {
     STORAGE_BUCKET: backend.storage.resources.bucket.bucketName,
     POLICY_REPORT_TABLE: backend.data.resources.tables['PolicyReport'].tableName,
@@ -54,3 +55,13 @@ s3Bucket.addEventNotification(
   new aws_s3_notifications.LambdaDestination(processReportFunctionHandler),
   { suffix: '.xlsx' }
 );
+
+// Output Lambda function name for easy CloudWatch debugging
+backend.addOutput({
+  custom: {
+    ProcessPolicyReportLambda: {
+      functionName: processReportFunctionHandler.functionName,
+      functionArn: processReportFunctionHandler.functionArn,
+    }
+  }
+});
