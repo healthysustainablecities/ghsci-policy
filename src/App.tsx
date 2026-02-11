@@ -88,7 +88,6 @@ function App() {
     console.log('Attempting to delete report:', {
       id: report.id,
       fileName: report.fileName,
-      owner: report.owner,
       currentUser: user?.username,
       userDetails: user
     });
@@ -101,7 +100,7 @@ function App() {
       // Delete S3 files first
       if (report.fileKey) {
         try {
-          await remove({ key: report.fileKey });
+          await remove({ path: report.fileKey });
           console.log('Deleted Excel file:', report.fileKey);
         } catch (err) {
           console.error('Failed to delete Excel file:', err);
@@ -110,7 +109,7 @@ function App() {
       
       if (report.pdfUrl) {
         try {
-          await remove({ key: report.pdfUrl });
+          await remove({ path: report.pdfUrl });
           console.log('Deleted PDF file:', report.pdfUrl);
         } catch (err) {
           console.error('Failed to delete PDF file:', err);

@@ -161,9 +161,11 @@ def process_report(bucket, key):
     output_pdf_name = f'{file_basename}.pdf'
     pdf_local_path = f'/tmp/{output_pdf_name}'
     # Upload PDF to public/reports/ folder
-    upload_key = f'public/reports/{output_pdf_name}'
+    s3_upload_key = f'public/reports/{output_pdf_name}'
+    # Store path without 'public/' prefix for Amplify Storage getUrl()
+    db_storage_path = f'reports/{output_pdf_name}'
     
-    print(f"Will upload PDF to: {upload_key}")
+    print(f"Will upload PDF to: {s3_upload_key}")
     print(f"Processing file: {key} from bucket: {bucket}")
 
     # 1. Download the Excel file from S3
@@ -199,10 +201,10 @@ def process_report(bucket, key):
     s3_client.upload_file(
         pdf_local_path, 
         bucket, 
-        upload_key
+        s3_upload_key
     )
 
-    # 5. Update database record with COMPLETED status
-    update_report_status(key, 'COMPLETED', pdf_url=upload_key)
+    # 5. Update database record with COMPLETED status (use path without public/ prefix)
+    update_report_status(key, 'COMPLETED', pdf_url=db_storage_path)
 
-    print(f"File {key} processed successfully, PDF uploaded to {upload_key}")
+    print(f"File {key} processed successfully, PDF uploaded to {s3_upload_key}")

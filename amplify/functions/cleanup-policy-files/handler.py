@@ -61,8 +61,11 @@ def clean_up_policy_files(s3, user_id, bucket_name, file_name, pdf_url):
     
     if pdf_url:
         # Delete PDF file
+        # pdf_url is stored without 'public/' prefix for Amplify Storage API usage
+        # but boto3 needs the full S3 key, so add it back
+        s3_pdf_key = f'public/{pdf_url}' if not pdf_url.startswith('public/') else pdf_url
         try:
-            s3.delete_object(Bucket=bucket_name, Key=pdf_url)
-            print(f"Deleted PDF file: {pdf_url}")
+            s3.delete_object(Bucket=bucket_name, Key=s3_pdf_key)
+            print(f"Deleted PDF file: {s3_pdf_key}")
         except Exception as e:
-            print(f"Failed to delete PDF file {pdf_url}: {e}")
+            print(f"Failed to delete PDF file {s3_pdf_key}: {e}")
