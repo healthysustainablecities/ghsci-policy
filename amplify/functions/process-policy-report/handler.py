@@ -9,7 +9,7 @@ import json
 import pandas as pd
 from urllib.parse import unquote_plus
 from datetime import datetime
-from fpdf import FPDF
+from ghsci import generate_online_policy_report
 
 s3_client = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
@@ -58,18 +58,13 @@ def update_report_status(file_key, status, pdf_url=None, error_message=None):
     try:
         table = get_table()
         
-        # Extract just the filename from S3 key (removes public/{user-id}/ prefix)
-        # S3 key format: public/{user-id}/{uuid}-{filename}
-        # Database stores: {uuid}-{filename}
-        search_key = file_key.split('/')[-1]  # Get last part after final /
-        
         print(f"S3 fileKey: {file_key}")
-        print(f"Searching database for: {search_key}")
+        print(f"Searching database for: {file_key}")
 
-        # Find the record by matching the filename portion
+        # Find the record by matching the full file key
         response = table.scan(
             FilterExpression='fileKey = :fk',
-            ExpressionAttributeValues={':fk': search_key}
+            ExpressionAttributeValues={':fk': file_key}
         )
         
         print(f"Scan response: {response}")
@@ -157,54 +152,32 @@ def process_report(bucket, key):
         raise ValueError(f"Failed to parse key: {e}") 
 
     # 3. Define local and remote paths
-    download_path = f'/tmp/{filename}'
+    checklist_file_path = f'/tmp/{filename}'
     output_pdf_name = f'{file_basename}.pdf'
     pdf_local_path = f'/tmp/{output_pdf_name}'
-    # Upload PDF to public/reports/ folder
+    # Full S3 key with public/ prefix for both upload and database storage
     s3_upload_key = f'public/reports/{output_pdf_name}'
-    # Store path without 'public/' prefix for Amplify Storage getUrl()
-    db_storage_path = f'reports/{output_pdf_name}'
     
     print(f"Will upload PDF to: {s3_upload_key}")
     print(f"Processing file: {key} from bucket: {bucket}")
 
     # 1. Download the Excel file from S3
-    s3_client.download_file(bucket, key, download_path)
+    s3_client.download_file(bucket, key, checklist_file_path)
 
-    # 2. Process it to extract policy data
-    df = pd.read_excel(download_path, sheet_name='Policy Checklist')
+    # 2. Generate report
 
-    # 3. Generate PDF report with Unicode support
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Helvetica", size=12)
-    
-    pdf.cell(200, 10, txt="Policy Report", ln=True)
-    
-    # Convert DataFrame rows to text, sanitizing Unicode characters
-    for _, row in df.iterrows():
-        row_text = str(row.to_dict())
-        # Replace smart quotes and other Unicode chars with ASCII equivalents
-        replacements = {
-            ''': "'", ''': "'", '"': '"', '"': '"', 
-            '–': '-', '—': '-', '…': '...'
-        }
-        for old, new in replacements.items():
-            row_text = row_text.replace(old, new)
-        # Remove any remaining non-ASCII characters
-        row_text = row_text.encode('ascii', 'replace').decode('ascii')
-        pdf.cell(200, 10, txt=row_text, ln=True)
+    pdf = generate_online_policy_report(checklist_file_path, bucket)
     
     pdf.output(pdf_local_path)
 
-    # 4. Upload PDF back to S3
+    # 3. Upload PDF back to S3
     s3_client.upload_file(
         pdf_local_path, 
         bucket, 
         s3_upload_key
     )
 
-    # 5. Update database record with COMPLETED status (use path without public/ prefix)
-    update_report_status(key, 'COMPLETED', pdf_url=db_storage_path)
+    # 5. Update database record with COMPLETED status (store full S3 path)
+    update_report_status(key, 'COMPLETED', pdf_url=s3_upload_key)
 
     print(f"File {key} processed successfully, PDF uploaded to {s3_upload_key}")

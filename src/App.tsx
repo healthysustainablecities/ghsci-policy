@@ -1,4 +1,4 @@
-import { useAuthenticator } from '@aws-amplify/ui-react';
+import { useAuthenticator, Icon } from '@aws-amplify/ui-react';
 import { useEffect, useState } from 'react';
 import { generateClient } from 'aws-amplify/data';
 import { remove } from 'aws-amplify/storage';
@@ -11,6 +11,22 @@ const client = generateClient<Schema>();
 function App() {
   const { user, signOut } = useAuthenticator();
   const [reports, setReports] = useState<Array<Schema["PolicyReport"]["type"]>>([]);
+
+
+
+  const SignOutIcon = ({ title }: { title?: string }) => {
+    return (
+      <div title={title}>
+        <Icon className="btn btn-secondary" onClick={signOut}>
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+          <polyline points="16 17 21 12 16 7"></polyline>
+          <line x1="21" y1="12" x2="9" y2="12"></line>
+        </svg>
+        </Icon>
+      </div>
+    );
+  };
 
   useEffect(() => {
     // Fetch user's reports on mount
@@ -140,19 +156,16 @@ function App() {
           <h1>Global Healthy and Sustainable Cities</h1>
           <h2>Policy Report Generator</h2>
         </div>
-        <button className="btn btn-secondary" onClick={signOut} title={user?.signInDetails?.loginId || undefined}>
-          Sign out
-        </button>
+        
+        <SignOutIcon title={user?.signInDetails?.loginId || undefined}/>
       </header>
       <div>
-        <h3>Completed checklists</h3>
-        <div><i>(Report processing is in development and likely does not yet work!)</i></div>
-        <br/>
         <ReportsList 
           onUploadComplete={handleUploadComplete}
           onDeleteReport={handleDeleteReport}
           client={client}
           reports={reports}
+          user={user}
         />
       </div>
     </main>

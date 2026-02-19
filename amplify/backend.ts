@@ -36,7 +36,9 @@ backend.auth.resources.authenticatedUserIamRole.addToPrincipalPolicy(
   new PolicyStatement({
     effect: Effect.ALLOW,
     actions: ['s3:PutObject', 's3:GetObject', 's3:DeleteObject'],
-    resources: ['arn:aws:s3:::*amplify*policy*storage*/public/*'],
+    resources: [
+      'arn:aws:s3:::*amplify*policy*storage*/public/*'
+    ],
   })
 );
 

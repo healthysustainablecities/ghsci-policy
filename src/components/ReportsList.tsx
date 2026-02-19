@@ -9,6 +9,7 @@ interface ReportsListProps {
   onDeleteReport: (report: Schema["PolicyReport"]["type"]) => void;
   client: ReturnType<typeof generateClient<Schema>> | null;
   reports: Array<Schema["PolicyReport"]["type"]>;
+  user: any;
 }
 
 const getStatusClass = (status: string) => {
@@ -31,7 +32,12 @@ const getStatusText = (status: string) => {
   }
 };
 
-export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDeleteReport, reports }) => {
+const sanitizeUserId = (userId: string): string => {
+  // Remove special characters and limit length for safe file paths
+  return userId.replace(/[^a-zA-Z0-9-]/g, '').substring(0, 50);
+};
+
+export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDeleteReport, reports, user }) => {
   const [selectedReport, setSelectedReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -60,20 +66,21 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
 
     setIsUploading(true);
     try {
-      // Generate secure random path in user's folder (Amplify automatically adds public/user-id/)
-      const randomId = crypto.randomUUID();
-      const key = `${randomId}-${file.name}`;
+      // Generate S3 key using sanitized username for organization
+      // Format: public/{sanitized-username}/{filename}
+      const username = sanitizeUserId(user?.username || 'unknown');
+      const key = `${username}/${file.name}`;
       
       await uploadData({
-        key,
+        path: `public/${key}`,
         data: file,
         options: {
           contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         }
       });
       
-      // Trigger processing after successful upload
-      onUploadComplete(file.name, file.size, key);
+      // Trigger processing after successful upload (fileName is original, fileKey is user-specific)
+      onUploadComplete(file.name, file.size, `public/${key}`);
     } catch (error) {
       console.error('Upload failed:', error);
       alert('Upload failed. Please try again.');
@@ -99,19 +106,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
   };
 
   const openReport = async (report: Schema["PolicyReport"]["type"]) => {
-    if (report.status !== 'COMPLETED' || !report.pdfUrl) {
       setSelectedReport(report);
       return;
-    }
-    
-    try {
-      const signedUrl = await getUrl({ 
-        key: report.pdfUrl
-      });
-      window.open(signedUrl.url.toString(), '_blank');
-    } catch (error) {
-      console.error('Failed to open report:', error);
-    }
   };
 
   return (
@@ -177,6 +173,12 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
+              <button 
+                onClick={() => setSelectedReport(null)}
+                className="btn btn-close"
+              >
+                🗙
+              </button>
               <h3>Report Status: {selectedReport.fileName}</h3>
             </div>
             
@@ -216,7 +218,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                 <button 
                   onClick={async () => {
                     try {
-                      const signedUrl = await getUrl({ key: selectedReport.pdfUrl! });
+                      const signedUrl = await getUrl({ path: selectedReport.pdfUrl! });
                       window.open(signedUrl.url.toString(), '_blank');
                     } catch (error) {
                       console.error('Failed to open PDF:', error);
@@ -229,12 +231,6 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                   View PDF Report
                 </button>
               )}
-              <button 
-                onClick={() => setSelectedReport(null)}
-                className="btn btn-secondary"
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>

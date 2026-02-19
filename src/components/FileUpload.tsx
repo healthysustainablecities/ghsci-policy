@@ -11,7 +11,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
   return (
     <FileUploader
       acceptedFileTypes={['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']}
-      path="uploads/"
+      path="public/"
       maxFileCount={1}
       maxFileSize={1024 * 1024} // 1MB
       isResumable
