@@ -183,29 +183,6 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
     }
   };
 
-  const handleDownloadPdf = async (pdfPath: string, fileName: string) => {
-    try {
-      const signedUrl = await getUrl({ path: pdfPath });
-      const response = await fetch(signedUrl.url.toString());
-      const blob = await response.blob();
-      
-      // Create download link
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName.replace('.xlsx', '.pdf') || 'report.pdf';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      // Clean up the object URL
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Failed to download PDF:', error);
-      alert('Failed to download PDF report');
-    }
-  };
-
   const handleCopyJson = (jsonString: string) => {
     navigator.clipboard.writeText(jsonString).then(() => {
       alert('JSON copied to clipboard!');
