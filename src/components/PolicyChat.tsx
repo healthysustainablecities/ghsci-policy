@@ -45,9 +45,23 @@ Please analyze this policy data and help me understand the strengths and gaps.`;
     {
       data: { messages },
       isLoading,
+      hasError,
+      error,
     },
     handleSendMessage,
   ] = useAIConversation('policyChat');
+
+  // Log any errors
+  React.useEffect(() => {
+    if (hasError) {
+      console.error('AI Conversation Error:', error);
+    }
+  }, [hasError, error]);
+
+  // Log when messages change
+  React.useEffect(() => {
+    console.log('Messages updated:', messages);
+  }, [messages]);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -67,6 +81,19 @@ Please analyze this policy data and help me understand the strengths and gaps.`;
           </button>
           <h3>💬 AI Policy Analysis - {report.fileName}</h3>
         </div>
+        
+        {hasError && (
+          <div style={{ 
+            padding: '15px', 
+            backgroundColor: '#f8d7da', 
+            color: '#721c24', 
+            borderRadius: '4px',
+            margin: '20px',
+            border: '1px solid #f5c6cb'
+          }}>
+            <strong>Error:</strong> {error?.message || 'Failed to connect to AI service. Please ensure AWS Bedrock is enabled in your region and you have requested access to Claude 3.5 Sonnet.'}
+          </div>
+        )}
         
         <div style={{ flex: 1, overflow: 'hidden' }}>
           <AIConversation

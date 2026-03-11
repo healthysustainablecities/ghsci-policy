@@ -44,6 +44,20 @@ backend.auth.resources.authenticatedUserIamRole.addToPrincipalPolicy(
   })
 );
 
+// Add Bedrock permissions for AI conversations
+backend.auth.resources.authenticatedUserIamRole.addToPrincipalPolicy(
+  new PolicyStatement({
+    effect: Effect.ALLOW,
+    actions: [
+      'bedrock:InvokeModel',
+      'bedrock:InvokeModelWithResponseStream',
+    ],
+    resources: [
+      'arn:aws:bedrock:*::foundation-model/anthropic.claude-3-5-sonnet-*',
+    ],
+  })
+);
+
 // Grant Lambda permissions to access S3 bucket
 const s3Bucket = backend.storage.resources.bucket;
 s3Bucket.grantReadWrite(processReportFunctionHandler);
