@@ -4,6 +4,7 @@ import { getUrl } from 'aws-amplify/storage';
 import { uploadData } from 'aws-amplify/storage';
 import type { Schema } from '../../amplify/data/resource';
 import { ReportSettings, type ReportConfig } from './ReportSettings';
+import { PolicyChat } from './PolicyChat';
 
 interface ReportsListProps {
   onUploadComplete: (fileName: string, fileSize: number, fileKey: string) => void;
@@ -43,9 +44,11 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
   const [selectedReport, setSelectedReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [settingsReport, setSettingsReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [policyDataReport, setPolicyDataReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
+  const [policyChatReport, setPolicyChatReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
+  const [pdfReport, setPdfReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const client = generateClient<Schema>();
 
   useEffect(() => {
@@ -159,7 +162,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
     }
   };
 
-  const handleViewPdf = async (pdfPath: string) => {
+  const handleViewPdf = async (pdfPath: string, report: Schema["PolicyReport"]["type"]) => {
     try {
       const signedUrl = await getUrl({ path: pdfPath });
       
@@ -173,6 +176,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
       // Create a local object URL that can be displayed inline
       const objectUrl = URL.createObjectURL(blob);
       setPdfViewerUrl(objectUrl);
+      setPdfReport(report);
     } catch (error) {
       console.error('Failed to open PDF:', error);
       alert('Failed to open PDF report');
@@ -390,26 +394,33 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
               {selectedReport.status === 'COMPLETED' && selectedReport.pdfUrl && (
                 <>
                   <button 
-                    onClick={() => handleViewPdf(selectedReport.pdfUrl!)}
+                    onClick={() => handleViewPdf(selectedReport.pdfUrl!, selectedReport)}
                     className="btn btn-primary"
                     style={{ marginRight: '10px' }}
                   >
                     View PDF
                   </button>
                   <button 
-                    onClick={() => handleDownloadPdf(selectedReport.pdfUrl!, selectedReport.fileName || 'report')}
-                    className="btn btn-secondary"
-                    title="Download PDF"
-                    style={{ marginRight: '10px' }}
-                  >
-                    Download PDF
-                  </button>
-                  <button 
                     onClick={() => setPolicyDataReport(selectedReport)}
                     className="btn btn-secondary"
                     title="View Policy Data JSON"
+                    style={{ marginRight: '10px' }}
                   >
                     JSON
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (selectedReport.policyData) {
+                        setPolicyChatReport(selectedReport);
+                        setSelectedReport(null);
+                      } else {
+                        alert('Policy data not available. Please regenerate the report to extract policy data.');
+                      }
+                    }}
+                    className="btn btn-secondary"
+                    title="Chat with AI about this policy data"
+                  >
+                    💬 Ask AI
                   </button>
                 </>
               )}
@@ -418,10 +429,11 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
         </div>
       )}
 
-      {pdfViewerUrl && (
+      {pdfViewerUrl && pdfReport && (
         <div className="modal-overlay" onClick={() => {
           URL.revokeObjectURL(pdfViewerUrl);
           setPdfViewerUrl(null);
+          setPdfReport(null);
         }}>
           <div className="modal-content pdf-viewer-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -429,12 +441,21 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                 onClick={() => {
                   URL.revokeObjectURL(pdfViewerUrl);
                   setPdfViewerUrl(null);
+                  setPdfReport(null);
                 }}
                 className="btn btn-close"
               >
                 🗙
               </button>
-              <h3>PDF Preview</h3>
+              <h3>PDF Preview - {pdfReport.fileName}</h3>
+              <button 
+                onClick={() => handleDownloadPdf(pdfReport.pdfUrl!, pdfReport.fileName || 'report')}
+                className="btn btn-secondary"
+                title="Download PDF"
+                style={{ marginLeft: 'auto' }}
+              >
+                ⬇️ Download
+              </button>
             </div>
             <div className="pdf-viewer-container">
               <iframe
@@ -584,6 +605,13 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             )}
           </div>
         </div>
+      )}
+
+      {policyChatReport && (
+        <PolicyChat
+          report={policyChatReport}
+          onClose={() => setPolicyChatReport(null)}
+        />
       )}
     </>
   );
