@@ -2,6 +2,7 @@ import { defineBackend } from '@aws-amplify/backend';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
+import { triggerProcessing } from './functions/trigger-processing/resource';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import { EventType } from 'aws-cdk-lib/aws-s3';
 import * as aws_s3_notifications from 'aws-cdk-lib/aws-s3-notifications';
@@ -13,6 +14,7 @@ const backend = defineBackend({
   auth,
   data,
   storage,
+  triggerProcessing,
 });
 
 // Get storage stack to add Lambda there
@@ -51,7 +53,20 @@ backend.data.resources.tables['PolicyReport'].grantReadWriteData(
   processReportFunctionHandler
 );
 
-// Set up S3 event notification from the bucket side (not Lambda side) to avoid circular dependency
+// Configure trigger-processing function
+backend.triggerProcessing.addEnvironment('PROCESS_LAMBDA_ARN', processReportFunctionHandler.functionArn);
+backend.triggerProcessing.addEnvironment('STORAGE_BUCKET', backend.storage.resources.bucket.bucketName);
+
+// Grant trigger function permission to invoke process Lambda
+backend.triggerProcessing.resources.lambda.addToRolePolicy(
+  new PolicyStatement({
+    effect: Effect.ALLOW,
+    actions: ['lambda:InvokeFunction'],
+    resources: [processReportFunctionHandler.functionArn],
+  })
+);
+
+// Set up S3 event notification - auto-trigger processing and parsing on upload
 s3Bucket.addEventNotification(
   EventType.OBJECT_CREATED,
   new aws_s3_notifications.LambdaDestination(processReportFunctionHandler),

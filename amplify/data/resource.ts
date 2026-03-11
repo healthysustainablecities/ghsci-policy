@@ -11,11 +11,12 @@ const schema = a.schema({
     .model({
       fileName: a.string().required(),
       fileKey: a.string(), // S3 key for uploaded file
-      status: a.enum(['UPLOADING', 'PROCESSING', 'COMPLETED', 'FAILED']),
+      status: a.enum(['UPLOADED', 'PROCESSING', 'COMPLETED', 'FAILED']),
       pdfUrl: a.string(),
       reportTitle: a.string(),
       collectionDetails: a.string(),
       policyChecklist: a.string(),
+      reportConfig: a.json(), // Custom report configuration (JSON)
       fileSize: a.integer().required(),
       errorMessage: a.string(),
       uploadedAt: a.datetime(),
@@ -25,6 +26,17 @@ const schema = a.schema({
     .authorization((allow) => [
       allow.owner()
     ]),
+
+  triggerReportProcessing: a
+    .mutation()
+    .arguments({
+      fileKey: a.string().required(),
+      reportConfig: a.json(),
+      bucket: a.string().required(),
+    })
+    .returns(a.json())
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function('triggerProcessing')),
 });
 
 export type Schema = ClientSchema<typeof schema>;

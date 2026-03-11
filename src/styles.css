@@ -156,6 +156,10 @@
   background-color: #17a2b8;
 }
 
+.status-uploaded {
+  background-color: #17a2b8;
+}
+
 .status-processing {
   background-color: #ffc107;
 }
@@ -222,6 +226,27 @@
 
 .error-text {
   color: #dc3545;
+}
+
+.error-indicator {
+  position: absolute;
+  bottom: 45px;
+  left: 10px;
+  right: 10px;
+  background-color: #dc3545;
+  color: white;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 3px;
+  text-align: center;
+}
+
+.error-summary {
+  color: #dc3545;
+  font-size: 12px;
+  margin: 5px 0 0 0;
+  font-style: italic;
+  line-height: 1.3;
 }
 
 /* Upload card */
@@ -325,4 +350,285 @@
 
 .report-meta a:hover {
   text-decoration: underline;
+}
+/* PDF Viewer Modal */
+.pdf-viewer-modal {
+  max-width: 90vw;
+  width: 90%;
+  max-height: 90vh;
+}
+
+.pdf-viewer-container {
+  margin-top: 20px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Update btn-secondary for download button */
+.modal-footer .btn-secondary {
+  background-color: #6c757d;
+  color: white;
+  position: static;
+  font-size: 16px;
+  padding: 12px 24px;
+  margin: 0;
+}
+
+/* Settings Modal */
+.settings-modal {
+  max-width: 800px;
+  width: 95%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.settings-actions {
+  padding: 10px 15px;
+  border-bottom: 2px solid #ddd;
+  background-color: #f8f9fa;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-icon {
+  background: none;
+  border: 2px solid #6c757d;
+  border-radius: 6px;
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.btn-icon:hover {
+  background-color: #6c757d;
+  transform: scale(1.05);
+}
+
+.btn-icon:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-icon:disabled:hover {
+  transform: none;
+  background: none;
+}
+
+.btn-icon-primary {
+  border-color: #007bff;
+}
+
+.btn-icon-primary:hover {
+  background-color: #007bff;
+}
+
+.btn-icon-secondary {
+  border-color: #dc3545;
+}
+
+.btn-icon-secondary:hover {
+  background-color: #dc3545;
+}
+
+.settings-content-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.settings-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summary-item {
+  padding: 10px 15px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border-left: 3px solid #007bff;
+  font-size: 14px;
+  color: #555;
+  line-height: 1.5;
+}
+
+.summary-item strong {
+  color: #333;
+  margin-right: 8px;
+}
+
+.settings-content {
+  margin: 20px 0;
+}
+
+.settings-section {
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #ddd;
+}
+
+.settings-section:last-child {
+  border-bottom: none;
+}
+
+.settings-section h4 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #333;
+}
+
+.settings-section h5 {
+  margin: 10px 0 5px 0;
+  color: #555;
+  font-size: 14px;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 15px;
+}
+
+.settings-field span {
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: #333;
+}
+
+.settings-field input[type="text"],
+.settings-field select,
+.settings-field textarea {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.settings-field textarea {
+  font-family: inherit;
+  resize: vertical;
+}
+
+.settings-checkbox {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+  cursor: pointer;
+}
+
+.settings-checkbox input[type="checkbox"] {
+  margin-right: 8px;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.settings-checkbox span {
+  font-weight: 600;
+}
+
+.settings-help {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 10px;
+  font-style: italic;
+}
+
+.image-upload-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+.image-upload-item label {
+  font-weight: 600;
+  color: #333;
+}
+
+.image-upload-item input[type="file"] {
+  font-size: 14px;
+}
+
+.image-filename {
+  font-size: 12px;
+  color: #28a745;
+  font-weight: 600;
+}
+
+.uploading-text {
+  font-size: 12px;
+  color: #ffc107;
+  font-style: italic;
+}
+
+.context-item {
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+}
+
+/* Action buttons */
+.action-buttons {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.btn-icon {
+  background-color: transparent;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.btn-icon:hover {
+  background-color: rgba(0,0,0,0.1);
+}
+
+.btn-icon:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Regenerate button styling */
+.btn-icon[title="Regenerate report"] {
+  color: #007bff;
+  font-size: 18px;
+}
+
+.btn-icon[title="Regenerate report"]:hover {
+  background-color: rgba(0, 123, 255, 0.1);
+}
+
+/* Regenerate button styling */
+.btn-icon[title='Regenerate report'] {
+  color: #007bff;
+  font-size: 18px;
+}
+
+.btn-icon[title='Regenerate report']:hover {
+  background-color: rgba(0, 123, 255, 0.1);
 }

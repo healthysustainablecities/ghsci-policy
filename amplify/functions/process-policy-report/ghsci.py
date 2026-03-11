@@ -115,8 +115,8 @@ def get_phrases(
     ):
         phrases['city_doi'] = city_details[f'doi_{reporting_template}']
     for i in range(1, len(city_details['images']) + 1):
-        phrases[f'Image {i} file'] = city_details['images'][i]['file']
-        phrases[f'Image {i} credit'] = city_details['images'][i]['credit']
+        phrases[f'Image {i} file'] = city_details['images'][str(i)]['file']
+        phrases[f'Image {i} credit'] = city_details['images'][str(i)]['credit']
     phrases['GOHSC_executive'] = (
         'Deepti Adlakha, Jonathan Arundel, Geoff Boeing, Eugen Resendiz Bontrud, Ester Cerin, Billie Giles-Corti, Carl Higgs, Vuokko Heikinheimo, Erica Hinckson, Shiqin Liu, Melanie Lowe, Anne Vernez Moudon, Jim Sallis, Deborah Salvo'
     )
@@ -172,6 +172,7 @@ def generate_online_policy_report(
     checklist: str = None,
     bucket: str = None,
     options: dict = {'language': 'English'},
+    report_config: dict = None,
 ):
     """Generate a policy report for a completed policy checklist."""    
     policy_setting = get_policy_setting(checklist)
@@ -184,6 +185,27 @@ def generate_online_policy_report(
             config['reporting']['languages'][language] = {}
         if language not in config['reporting']['exceptions']:
             config['reporting']['exceptions'][language] = {}
+    
+    # Apply custom report configuration if provided
+    if report_config and 'reporting' in report_config:
+        print('Applying custom report configuration...')
+        custom_reporting = report_config['reporting']
+        
+        # Override reporting settings
+        for key, value in custom_reporting.items():
+            if key == 'languages' and language in custom_reporting.get('languages', {}):
+                # Merge language-specific settings
+                for lang_key, lang_value in custom_reporting['languages'][language].items():
+                    config['reporting']['languages'][language][lang_key] = lang_value
+            elif key == 'images':
+                # Handle image configurations
+                config['reporting']['images'] = custom_reporting['images']
+            else:
+                # Override other reporting settings
+                config['reporting'][key] = value
+        
+        print(f"Updated config with custom settings: {list(custom_reporting.keys())}")
+    
     config['folder_path'] = os.environ.get('LAMBDA_TASK_ROOT', os.path.dirname(__file__))
     config['bucket'] = bucket
     config['policy_review'] = checklist

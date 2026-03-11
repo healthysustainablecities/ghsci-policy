@@ -4,6 +4,7 @@ import { generateClient } from 'aws-amplify/data';
 import { remove } from 'aws-amplify/storage';
 import type { Schema } from '../amplify/data/resource';
 import { ReportsList } from './components/ReportsList';
+import outputs from '../amplify_outputs.json';
 import './styles.css';
 
 const client = generateClient<Schema>();
@@ -84,7 +85,7 @@ function App() {
 
   const handleUploadComplete = async (fileName: string, fileSize: number, fileKey: string) => {
     try {
-      // Create record with PROCESSING status since Lambda triggers immediately
+      // Create record with PROCESSING status since S3 auto-triggers processing on upload
       const result = await client.models.PolicyReport.create({
         fileName,
         fileSize,
@@ -149,12 +150,79 @@ function App() {
     }
   };
 
+  const handleProcessReport = async (report: Schema["PolicyReport"]["type"]) => {
+    if (!report.fileKey) {
+      alert('Cannot process report: file key is missing');
+      return;
+    }
+
+    const isRegeneration = report.status === 'COMPLETED';
+
+    try {
+      // Update status to PROCESSING and clear any previous errors
+      const updateData: any = {
+        id: report.id,
+        status: 'PROCESSING',
+        processedAt: new Date().toISOString(),
+      };
+      
+      // Clear error message if regenerating
+      if (report.errorMessage) {
+        updateData.errorMessage = null;
+      }
+      
+      await client.models.PolicyReport.update(updateData);
+
+      // Get the bucket name from amplify outputs
+      const bucketName = outputs.storage?.bucket_name;
+      
+      if (!bucketName) {
+        throw new Error('Storage bucket name not found in configuration');
+      }
+
+      // Trigger processing via custom mutation
+      const result = await client.mutations.triggerReportProcessing({
+        fileKey: report.fileKey,
+        reportConfig: typeof report.reportConfig === 'string' 
+          ? report.reportConfig 
+          : JSON.stringify(report.reportConfig),
+        bucket: bucketName,
+      });
+
+      console.log('Processing triggered:', result);
+      
+      // Check if trigger was successful
+      const triggerResult = result?.data;
+      if (!triggerResult?.success) {
+        throw new Error(triggerResult?.message || 'Failed to trigger processing');
+      }
+      
+      alert(isRegeneration 
+        ? 'Report regeneration started. This may take a few minutes.' 
+        : 'Report processing started. This may take a few minutes.');
+    } catch (error) {
+      console.error('Failed to start processing:', error);
+      alert('Failed to start processing. Please try again.');
+      
+      // Revert status on error
+      try {
+        await client.models.PolicyReport.update({
+          id: report.id,
+          status: isRegeneration ? 'COMPLETED' : 'UPLOADED',
+        });
+      } catch (revertError) {
+        console.error('Failed to revert status:', revertError);
+      }
+    }
+  };
+
   return (
     <main className="main-container">
       <header className="header">
         <div>
           <h1>Global Healthy and Sustainable Cities</h1>
           <h2>Policy Report Generator</h2>
+          <p>A tool to support analysis and reporting of policy indicators for the Global Observatory of Healthy and Sustainable Cities' <a href="https://www.healthysustainablecities.org/1000cities/" target="_blank" rel="noopener noreferrer">1000 Cities Challenge</a>.</p>
         </div>
         
         <SignOutIcon title={user?.signInDetails?.loginId || undefined}/>
@@ -163,6 +231,7 @@ function App() {
         <ReportsList 
           onUploadComplete={handleUploadComplete}
           onDeleteReport={handleDeleteReport}
+          onProcessReport={handleProcessReport}
           client={client}
           reports={reports}
           user={user}
