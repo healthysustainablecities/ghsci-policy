@@ -46,7 +46,6 @@ Please analyze this policy data and help me understand the strengths and gaps.`;
       data: { messages },
       isLoading,
       hasError,
-      error,
     },
     handleSendMessage,
   ] = useAIConversation('policyChat');
@@ -54,9 +53,9 @@ Please analyze this policy data and help me understand the strengths and gaps.`;
   // Log any errors
   React.useEffect(() => {
     if (hasError) {
-      console.error('AI Conversation Error:', error);
+      console.error('AI Conversation Error - check AWS Bedrock configuration');
     }
-  }, [hasError, error]);
+  }, [hasError]);
 
   // Log when messages change
   React.useEffect(() => {
@@ -91,7 +90,7 @@ Please analyze this policy data and help me understand the strengths and gaps.`;
             margin: '20px',
             border: '1px solid #f5c6cb'
           }}>
-            <strong>Error:</strong> {error?.message || 'Failed to connect to AI service. Please ensure AWS Bedrock is enabled in your region and you have requested access to Claude 3.5 Sonnet.'}
+            <strong>Error:</strong> Failed to connect to AI service. Please ensure AWS Bedrock is enabled in your region and you have requested access to Claude 3.5 Sonnet.
           </div>
         )}
         
