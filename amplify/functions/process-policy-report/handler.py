@@ -10,7 +10,7 @@ import time
 import traceback
 from urllib.parse import unquote_plus
 from datetime import datetime
-from ghsci import generate_online_policy_report, get_policy_setting
+from ghsci import generate_online_policy_report, get_policy_setting, policy_data_setup
 
 s3_client = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
@@ -20,8 +20,8 @@ def parse_excel_config(excel_file_path):
     Parse Excel file using ghsci.get_policy_setting() to extract configuration
     Returns a reportConfig dictionary
     
-    Note: The 'Collection details' sheet does not contain demographics information,
-    so that field will use placeholder text that users can customize later.
+    Extracts: City, Country, Region, Levels of government, Environmental disaster context,
+    City context, and Demographics and health equity from the 'Collection details' sheet.
     """
     try:
         # Use existing ghsci function to extract collection details
@@ -38,6 +38,8 @@ def parse_excel_config(excel_file_path):
         region = setting.get('Region', '')
         gov_levels = setting.get('Levels of government', '')
         env_disaster = setting.get('Environmental disaster context', '')
+        city_context = setting.get('City context', '')
+        demographics = setting.get('Demographics and health equity', '')
         
         # Build reportConfig in the format expected by the frontend
         # Use default placeholder images from ghsci.py config
@@ -70,12 +72,12 @@ def parse_excel_config(excel_file_path):
                         'context': [
                             {
                                 'City context': [
-                                    {'summary': f'Contextual information about {city}, {region}, {country}.'.replace(', , ', ', ') if any([city, region, country]) else 'Contextual information about your study region.'}
+                                    {'summary': city_context if city_context and city_context != 'Not specified' else f'Contextual information about {city}, {region}, {country}.'.replace(', , ', ', ') if any([city, region, country]) else 'Contextual information about your study region.'}
                                 ]
                             },
                             {
                                 'Demographics and health equity': [
-                                    {'summary': 'Placeholder: Demographics and health equity information. Note: This is not extracted from the Excel file and should be manually entered by the user.'}
+                                    {'summary': demographics if demographics and demographics != 'Not specified' else 'Demographics and health equity information can be added here.'}
                                 ]
                             },
                             {
@@ -95,7 +97,9 @@ def parse_excel_config(excel_file_path):
         }
         
         print(f'Generated config: {json.dumps(config, indent=2)}')
-        print(f'Config summary: City={city}, Country={country}, Region={region}, Gov={gov_levels[:50] if gov_levels else "None"}')
+        print(f'Config summary: City={city}, Country={country}, Region={region}')
+        print(f'City context: {city_context[:100] if city_context else "None"}...')
+        print(f'Demographics: {demographics[:100] if demographics else "None"}...')
         return config
         
     except Exception as e:
@@ -361,10 +365,19 @@ def update_report_config(file_key, report_config):
             # Convert config to JSON string for DynamoDB (AWSJSON type expects string)
             config_json_string = json.dumps(report_config)
 
+            # Check if initialReportConfig already exists
+            # If not, save this as the initial config (for revert functionality)
+            if 'initialReportConfig' not in item or not item.get('initialReportConfig'):
+                print("Setting initialReportConfig (first parse)")
+                update_expression = 'SET reportConfig = :config, initialReportConfig = :config, updatedAt = :updatedAt'
+            else:
+                print("initialReportConfig already exists, only updating reportConfig")
+                update_expression = 'SET reportConfig = :config, updatedAt = :updatedAt'
+
             # Update the record with the parsed config
             update_response = table.update_item(
                 Key={'id': record_id},
-                UpdateExpression='SET reportConfig = :config, updatedAt = :updatedAt',
+                UpdateExpression=update_expression,
                 ExpressionAttributeValues={
                     ':config': config_json_string,
                     ':updatedAt': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
@@ -379,6 +392,84 @@ def update_report_config(file_key, report_config):
         except Exception as e:
             if attempt == max_retries - 1:
                 print(f"Error updating reportConfig after {max_retries} attempts: {str(e)}")
+                import traceback
+                print(f"Traceback: {traceback.format_exc()}")
+                # Don't raise - this is not critical to fail the entire process
+            else:
+                print(f"Error on attempt {attempt + 1}, retrying: {str(e)}")
+                time.sleep(retry_delay)
+                retry_delay *= 2
+
+def update_policy_data(file_key, policy_data, max_retries=5):
+    """
+    Update the policyData field in the database with policy_data_setup() results.
+    
+    Args:
+        file_key: The S3 file key to identify the record
+        policy_data: Dictionary from policy_data_setup() to be stored as JSON
+        max_retries: Maximum number of retry attempts
+    """
+    retry_delay = 1
+    
+    # Convert policy_data to JSON string
+    # The policy_data is a dictionary of pandas DataFrames
+    # Use .to_json() on each DataFrame
+    serializable_data = {}
+    for topic, df in policy_data.items():
+        # df.to_json() returns a JSON string, parse it back to an object for proper nesting
+        serializable_data[topic] = json.loads(df.to_json(orient="index"))
+    
+    # Use ensure_ascii=False to preserve actual Unicode characters (✔, ✘) instead of escaping as \uXXXX
+    # DynamoDB/AppSync handle UTF-8 properly, so the characters display correctly in the browser
+    policy_data_json_string = json.dumps(serializable_data, ensure_ascii=False)
+    
+    print(f"Updating policyData for {file_key}")
+    print(f"Policy data size: {len(policy_data_json_string)} bytes")
+    
+    for attempt in range(max_retries):
+        try:
+            table = get_table()
+            
+            # Find the record
+            response = table.scan(
+                FilterExpression='fileKey = :fk',
+                ExpressionAttributeValues={':fk': file_key}
+            )
+            
+            if not response.get('Items'):
+                if attempt < max_retries - 1:
+                    print(f"No record found for fileKey: {file_key}, retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                else:
+                    print(f"No record found for fileKey: {file_key} after {max_retries} attempts")
+                    return
+            
+            item = response['Items'][0]
+            record_id = item['id']
+            
+            print(f"Updating policyData for record {record_id}")
+            
+            # Update the policyData field
+            update_expression = 'SET policyData = :policyData, updatedAt = :updatedAt'
+            
+            update_response = table.update_item(
+                Key={'id': record_id},
+                UpdateExpression=update_expression,
+                ExpressionAttributeValues={
+                    ':policyData': policy_data_json_string,
+                    ':updatedAt': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+                },
+                ReturnValues='ALL_NEW'
+            )
+            
+            print(f"Successfully updated policyData for record {record_id}")
+            return  # Success, exit retry loop
+            
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"Error updating policyData after {max_retries} attempts: {str(e)}")
                 import traceback
                 print(f"Traceback: {traceback.format_exc()}")
                 # Don't raise - this is not critical to fail the entire process
@@ -451,6 +542,21 @@ def process_report(bucket, key, report_config=None):
             # Don't fail the entire process if parsing fails
     else:
         print("Using provided custom config")
+    
+    # Extract and save policy data for viewing
+    try:
+        print("Extracting policy data using policy_data_setup()...")
+        policy_data = policy_data_setup(checklist_file_path)
+        if policy_data:
+            update_policy_data(key, policy_data)
+            print("Policy data extracted and saved successfully")
+        else:
+            print("Warning: policy_data_setup returned None")
+    except Exception as e:
+        print(f"Warning: Error extracting policy data: {str(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        # Don't fail the entire process if policy data extraction fails
 
     # Generate PDF report
     try:

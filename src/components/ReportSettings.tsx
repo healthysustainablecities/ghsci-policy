@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { uploadData } from 'aws-amplify/storage';
+import { generateClient } from 'aws-amplify/data';
+import type { Schema } from '../../amplify/data/resource';
+
+const client = generateClient<Schema>();
 
 export interface ReportConfig {
   reporting?: {
@@ -85,67 +89,29 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
 
   useEffect(() => {
     // Load existing config from report if available
-    console.log('useEffect triggered - report:', report.id, 'reportConfig:', report.reportConfig);
-    
     if (report.reportConfig) {
       try {
         const existingConfig = typeof report.reportConfig === 'string' 
           ? JSON.parse(report.reportConfig) 
           : report.reportConfig;
         
-        console.log('Loading existing config:', JSON.stringify(existingConfig, null, 2));
+        console.log('Settings loaded:', existingConfig?.reporting?.languages?.English?.name || 'No name found');
         
-        // Deep merge with defaults to ensure all fields exist
-        const mergedConfig = {
+        // Use existing config directly, only provide defaults for missing top-level structures
+        const loadedConfig = {
           reporting: {
-            doi: existingConfig?.reporting?.doi ?? '',
-            images: {
-              '1': existingConfig?.reporting?.images?.['1'] ?? { file: 'Example image of a vibrant, walkable, urban neighbourhood - landscape.jpg', credit: 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Carl Higgs, Bing Image Creator, 2023' },
-              '2': existingConfig?.reporting?.images?.['2'] ?? { file: 'Example image 2-Landscape.jpg', credit: 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Eugen Resendiz, Bing Image Creator, 2023' },
-              '3': existingConfig?.reporting?.images?.['3'] ?? { file: 'Example image of a vibrant, walkable, urban neighbourhood - square.jpg', credit: 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Carl Higgs, Bing Image Creator, 2023' },
-              '4': existingConfig?.reporting?.images?.['4'] ?? { file: 'Example image of climate resilient lively city watercolor-Square.jpg', credit: 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Eugen Resendiz, Bing Image Creator, 2023' },
-            },
-            languages: {
-              English: {
-                name: existingConfig?.reporting?.languages?.English?.name ?? 'City name',
-                country: existingConfig?.reporting?.languages?.English?.country ?? 'Country name',
-                summary_policy: existingConfig?.reporting?.languages?.English?.summary_policy ?? 'After reviewing policy indicator results for your city, provide a contextualised summary by modifying the "summary_policy" text for each configured language within the region configuration file.',
-                context: existingConfig?.reporting?.languages?.English?.context ?? [
-                  {
-                    'City context': [
-                      { summary: 'Contextual information about your study region.' }
-                    ]
-                  },
-                  {
-                    'Demographics and health equity': [
-                      { summary: 'Demographics and health equity summary.' }
-                    ]
-                  },
-                  {
-                    'Environmental disaster context': [
-                      { summary: 'Environmental disaster context.' }
-                    ]
-                  },
-                  {
-                    'Levels of government': [
-                      { summary: '' }
-                    ]
-                  }
-                ]
-              }
-            }
+            doi: existingConfig?.reporting?.doi || '',
+            images: existingConfig?.reporting?.images || config.reporting?.images || {},
+            languages: existingConfig?.reporting?.languages || config.reporting?.languages || {}
           }
         };
         
-        console.log('Merged config to be set:', JSON.stringify(mergedConfig, null, 2));
-        setConfig(mergedConfig);
+        setConfig(loadedConfig);
       } catch (error) {
         console.error('Failed to parse existing config:', error);
       }
-    } else {
-      console.log('No reportConfig found, using defaults');
     }
-  }, [report]);
+  }, [report.id]);
 
   const handleImageUpload = async (imageNumber: string, file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -193,22 +159,18 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      console.log('=== HANDLE SAVE START ===');
-      console.log('Config before save:', JSON.stringify(config, null, 2));
+      console.log('Saving config changes...');
       
       // Ensure config is properly formatted as a plain object
       const cleanConfig = JSON.parse(JSON.stringify(config));
-      console.log('Cleaned config:', JSON.stringify(cleanConfig, null, 2));
       
       await onSave(cleanConfig);
       
-      // Success - the onSave function will show success message
-      // Wait a moment to ensure user sees any success feedback
+      // Wait briefly for success feedback
       await new Promise(resolve => setTimeout(resolve, 500));
       
       // Exit edit mode after successful save
       setIsEditing(false);
-      console.log('=== HANDLE SAVE END ===');
     } catch (error) {
       console.error('Failed to save settings:', error);
       alert('Failed to save settings. Please try again.');
@@ -227,6 +189,31 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
       current[path[path.length - 1]] = value;
       return newConfig;
     });
+  };
+
+  const handleRevert = async () => {
+    try {
+      console.log('Reverting to initial config...');
+      const { data: freshReport } = await client.models.PolicyReport.get({ id: report.id });
+      
+      // Handle both array and single object responses
+      const reportData = Array.isArray(freshReport) ? freshReport[0] : freshReport;
+      
+      if (reportData?.initialReportConfig) {
+        const initialConfig = typeof reportData.initialReportConfig === 'string'
+          ? JSON.parse(reportData.initialReportConfig)
+          : reportData.initialReportConfig;
+        
+        setConfig(JSON.parse(JSON.stringify(initialConfig))); // Deep copy
+        setIsEditing(false);
+        alert('Settings reverted to original Excel-parsed configuration.');
+      } else {
+        alert('No initial configuration found. Try re-uploading the file.');
+      }
+    } catch (error) {
+      console.error('Failed to revert settings:', error);
+      alert('Failed to revert settings. Please try again.');
+    }
   };
 
   const renderSummary = () => {
@@ -372,13 +359,22 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
         {/* Fixed action buttons */}
         <div className="settings-actions">
           {!isEditing ? (
-            <button 
-              onClick={() => setIsEditing(true)} 
-              className="btn-icon"
-              title="Edit Settings"
-            >
-              ✏️
-            </button>
+            <>
+              <button 
+                onClick={handleRevert} 
+                className="btn-icon btn-icon-secondary"
+                title="Revert to Original Excel Config"
+              >
+                ↶
+              </button>
+              <button 
+                onClick={() => setIsEditing(true)} 
+                className="btn-icon"
+                title="Edit Settings"
+              >
+                ✏️
+              </button>
+            </>
           ) : (
             <>
               <button 

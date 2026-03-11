@@ -17,6 +17,8 @@ const schema = a.schema({
       collectionDetails: a.string(),
       policyChecklist: a.string(),
       reportConfig: a.json(), // Custom report configuration (JSON)
+      initialReportConfig: a.json(), // Original parsed config from Excel (for revert)
+      policyData: a.json(), // Policy data from policy_data_setup() for viewing
       fileSize: a.integer().required(),
       errorMessage: a.string(),
       uploadedAt: a.datetime(),

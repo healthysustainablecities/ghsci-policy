@@ -42,6 +42,7 @@ const sanitizeUserId = (userId: string): string => {
 export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDeleteReport, onProcessReport, reports, user }) => {
   const [selectedReport, setSelectedReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [settingsReport, setSettingsReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
+  const [policyDataReport, setPolicyDataReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
@@ -128,47 +129,31 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
     if (!settingsReport) return;
     
     try {
-      console.log('=== SAVE SETTINGS START ===');
-      console.log('Report ID:', settingsReport.id);
-      console.log('Current report:', JSON.stringify(settingsReport, null, 2));
-      console.log('Config to save:', JSON.stringify(config, null, 2));
+      console.log('Saving settings for:', settingsReport.fileName);
       
       // Update the report in the database
       // Note: reportConfig field expects a JSON string, not an object
-      const updateResult = await client.models.PolicyReport.update({
+      await client.models.PolicyReport.update({
         id: settingsReport.id,
         reportConfig: JSON.stringify(config),
       });
       
-      console.log('Update result:', JSON.stringify(updateResult, null, 2));
+      // Wait for DynamoDB eventual consistency
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Wait for the database to process
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Fetch the updated report to verify it was saved
-      const { data: verifyReport, errors: verifyErrors } = await client.models.PolicyReport.get({
+      // Fetch the updated report to verify
+      const { data: verifyReport } = await client.models.PolicyReport.get({
         id: settingsReport.id
       });
       
-      console.log('Verification fetch result:', JSON.stringify(verifyReport, null, 2));
-      console.log('Verification errors:', verifyErrors);
-      
       if (verifyReport) {
-        console.log('Verified reportConfig type:', typeof verifyReport.reportConfig);
-        console.log('Verified reportConfig value:', JSON.stringify(verifyReport.reportConfig, null, 2));
-        
-        // Update the settingsReport with fresh data
+        console.log('Settings saved successfully');
         setSettingsReport(verifyReport);
-      } else {
-        console.error('Failed to verify saved report - no data returned');
       }
       
-      console.log('=== SAVE SETTINGS END ===');
       alert('Settings saved successfully!');
     } catch (error) {
-      console.error('=== SAVE SETTINGS ERROR ===');
-      console.error('Error:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
+      console.error('Failed to save settings:', error);
       alert('Failed to save settings. Please try again.');
       throw error;
     }
@@ -215,6 +200,27 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
       console.error('Failed to download PDF:', error);
       alert('Failed to download PDF report');
     }
+  };
+
+  const handleCopyJson = (jsonString: string) => {
+    navigator.clipboard.writeText(jsonString).then(() => {
+      alert('JSON copied to clipboard!');
+    }).catch((error) => {
+      console.error('Failed to copy:', error);
+      alert('Failed to copy to clipboard.');
+    });
+  };
+
+  const handleDownloadJson = (jsonString: string, fileName: string) => {
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${fileName.replace('.xlsx', '')}_policy_data.json` || 'policy_data.json';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -388,14 +394,22 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                     className="btn btn-primary"
                     style={{ marginRight: '10px' }}
                   >
-                    View PDF Report
+                    View PDF
                   </button>
                   <button 
                     onClick={() => handleDownloadPdf(selectedReport.pdfUrl!, selectedReport.fileName || 'report')}
                     className="btn btn-secondary"
                     title="Download PDF"
+                    style={{ marginRight: '10px' }}
                   >
-                    ⬇️ Download
+                    Download PDF
+                  </button>
+                  <button 
+                    onClick={() => setPolicyDataReport(selectedReport)}
+                    className="btn btn-secondary"
+                    title="View Policy Data JSON"
+                  >
+                    JSON
                   </button>
                 </>
               )}
@@ -445,6 +459,131 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
           onClose={() => setSettingsReport(null)}
           onSave={handleSaveSettings}
         />
+      )}
+
+      {policyDataReport && (
+        <div className="modal-overlay" onClick={() => setPolicyDataReport(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '90%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <button 
+                onClick={() => setPolicyDataReport(null)}
+                className="btn btn-close"
+              >
+                🗙
+              </button>
+              <h3>Policy Data - {policyDataReport.fileName}</h3>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
+              {policyDataReport.policyData ? (
+                <pre style={{ 
+                  backgroundColor: '#f5f5f5', 
+                  padding: '15px', 
+                  borderRadius: '4px', 
+                  overflow: 'auto',
+                  fontSize: '13px',
+                  lineHeight: '1.6',
+                  margin: 0,
+                  whiteSpace: 'pre',
+                  fontFamily: 'Consolas, Monaco, "Courier New", monospace'
+                }}>
+                  {(() => {
+                    try {
+                      let jsonData = policyDataReport.policyData;
+                      
+                      // Parse if it's a string
+                      while (typeof jsonData === 'string') {
+                        try {
+                          jsonData = JSON.parse(jsonData);
+                        } catch {
+                          // If parse fails, break out to prevent infinite loop
+                          break;
+                        }
+                      }
+                      
+                      // Pretty print with 2-space indentation
+                      return JSON.stringify(jsonData, null, 2);
+                    } catch (error) {
+                      console.error('JSON parse error:', error);
+                      // If parsing fails, show raw data
+                      return String(policyDataReport.policyData);
+                    }
+                  })()}
+                </pre>
+              ) : (
+                <div style={{ padding: '20px', textAlign: 'center' }}>
+                  <p style={{ marginBottom: '15px' }}>
+                    Policy data is not available for this report.
+                  </p>
+                  <p style={{ fontSize: '14px', color: '#666' }}>
+                    This could be because:
+                  </p>
+                  <ul style={{ textAlign: 'left', display: 'inline-block', fontSize: '14px', color: '#666' }}>
+                    <li>The report was generated before the policy data feature was added</li>
+                    <li>The backend needs to be deployed with the latest changes</li>
+                    <li>An error occurred during processing</li>
+                  </ul>
+                  <p style={{ marginTop: '15px', fontSize: '14px' }}>
+                    Try regenerating the report to extract policy data.
+                  </p>
+                </div>
+              )}
+            </div>
+            {policyDataReport.policyData && (
+              <div className="modal-footer" style={{ borderTop: '1px solid #ddd', padding: '15px', display: 'flex', gap: '10px' }}>
+                <button 
+                  onClick={() => {
+                    try {
+                      let jsonData = policyDataReport.policyData;
+                      
+                      // Parse multiple times if needed (handles double-encoding)
+                      while (typeof jsonData === 'string') {
+                        try {
+                          jsonData = JSON.parse(jsonData);
+                        } catch {
+                          break;
+                        }
+                      }
+                      
+                      const jsonString = JSON.stringify(jsonData, null, 2);
+                      handleCopyJson(jsonString);
+                    } catch (error) {
+                      alert('Failed to copy JSON. The data might be corrupted.');
+                    }
+                  }}
+                  className="btn btn-secondary"
+                  title="Copy JSON to clipboard"
+                >
+                  📋 Copy
+                </button>
+                <button 
+                  onClick={() => {
+                    try {
+                      let jsonData = policyDataReport.policyData;
+                      
+                      // Parse multiple times if needed (handles double-encoding)
+                      while (typeof jsonData === 'string') {
+                        try {
+                          jsonData = JSON.parse(jsonData);
+                        } catch {
+                          break;
+                        }
+                      }
+                      
+                      const jsonString = JSON.stringify(jsonData, null, 2);
+                      handleDownloadJson(jsonString, policyDataReport.fileName || 'policy_data');
+                    } catch (error) {
+                      alert('Failed to download JSON. The data might be corrupted.');
+                    }
+                  }}
+                  className="btn btn-primary"
+                  title="Download JSON file"
+                >
+                  ⬇️ Download
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </>
   );

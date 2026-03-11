@@ -192,7 +192,7 @@ function App() {
       console.log('Processing triggered:', result);
       
       // Check if trigger was successful
-      const triggerResult = result?.data;
+      const triggerResult = result?.data as { success?: boolean; message?: string } | null;
       if (!triggerResult?.success) {
         throw new Error(triggerResult?.message || 'Failed to trigger processing');
       }
