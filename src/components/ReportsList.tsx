@@ -448,14 +448,6 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                 🗙
               </button>
               <h3>PDF Preview - {pdfReport.fileName}</h3>
-              <button 
-                onClick={() => handleDownloadPdf(pdfReport.pdfUrl!, pdfReport.fileName || 'report')}
-                className="btn btn-secondary"
-                title="Download PDF"
-                style={{ marginLeft: 'auto' }}
-              >
-                ⬇️ Download
-              </button>
             </div>
             <div className="pdf-viewer-container">
               <iframe
