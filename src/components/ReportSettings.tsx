@@ -91,9 +91,16 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
     // Load existing config from report if available
     if (report.reportConfig) {
       try {
-        const existingConfig = typeof report.reportConfig === 'string' 
-          ? JSON.parse(report.reportConfig) 
-          : report.reportConfig;
+        let existingConfig = report.reportConfig;
+        
+        // Parse multiple times if needed (handles double-encoding from a.json() + JSON.stringify)
+        while (typeof existingConfig === 'string') {
+          try {
+            existingConfig = JSON.parse(existingConfig);
+          } catch {
+            break;
+          }
+        }
         
         console.log('Settings loaded:', existingConfig?.reporting?.languages?.English?.name || 'No name found');
         

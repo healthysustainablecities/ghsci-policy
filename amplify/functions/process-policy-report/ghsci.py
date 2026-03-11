@@ -653,7 +653,7 @@ def get_policy_setting(xlsx) -> dict:
         )
         
         # Extract City context if available
-        city_context_rows = df.loc[df['item'].str.strip() == 'City context:', 'value']
+        city_context_rows = df.loc[df['item'].str.strip() == 'City context', 'value']
         if len(city_context_rows) > 0:
             setting['City context'] = city_context_rows.values[0]
             if pd.isna(setting['City context']):
@@ -662,7 +662,7 @@ def get_policy_setting(xlsx) -> dict:
             setting['City context'] = ''
         
         # Extract Demographics and health equity if available
-        demographics_rows = df.loc[df['item'].str.strip() == 'Demographics and health equity:', 'value']
+        demographics_rows = df.loc[df['item'].str.strip() == 'Demographics and health equity', 'value']
         if len(demographics_rows) > 0:
             setting['Demographics and health equity'] = demographics_rows.values[0]
             if pd.isna(setting['Demographics and health equity']):
