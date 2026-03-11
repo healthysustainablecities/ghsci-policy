@@ -53,7 +53,7 @@ backend.auth.resources.authenticatedUserIamRole.addToPrincipalPolicy(
       'bedrock:InvokeModelWithResponseStream',
     ],
     resources: [
-      'arn:aws:bedrock:*::foundation-model/anthropic.claude-3-5-sonnet-*',
+      'arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6-*',
     ],
   })
 );

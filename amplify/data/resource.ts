@@ -42,7 +42,7 @@ const schema = a.schema({
 
   // AI Conversation for policy analysis
   policyChat: a.conversation({
-    aiModel: a.ai.model('Claude 3.5 Sonnet'),
+    aiModel: a.ai.model('Claude Sonnet 4.6'),
     systemPrompt: 'You are a policy analysis assistant for the 1000 Cities Challenge. You help users understand their policy checklist data and provide insights. The policy data includes policy topics with three criteria per measure: identified (✔/✘/-), aligns (✔/✘/✔✘/-), and measurable (✔/✘/-). Provide clear insights, highlight strengths, identify gaps, suggest improvements, and explain why policies matter for urban health and sustainability.',
   })
     .authorization((allow) => allow.owner()),
