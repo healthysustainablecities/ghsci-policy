@@ -309,12 +309,14 @@ def _checklist_policy_aligns(policy):
     )
     aligns = any(
         policy.query(
-            """Policy.astype('str') not in ['No','','nan','NaN'] and qualifier!='No' and `Evidence-informed threshold`.astype('str') not in ['No']""",
+            """Policy.astype('str') not in ['No','','nan','NaN'] and qualifier!='No'""",
         )['Policy'],
     )
     does_not_align = any(
         policy.query(
-            """Policy.astype('str') not in ['No','','nan','NaN'] and qualifier=='No'""",
+            """
+            Policy.astype('str') not in ['No','','nan','NaN'] and ((qualifier=='No') or (qualifier!='No' and `Evidence-informed threshold`.astype('str') in ['No']))
+            """,
         )['Policy'],
     )
     # if aligns_count == policy_count:
