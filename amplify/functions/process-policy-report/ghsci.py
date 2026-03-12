@@ -507,6 +507,50 @@ def get_policy_presence_quality_score_dictionary(xlsx):
     return policy_score
 
 
+
+def validate_threshold_vs_target(df: pd.DataFrame):
+    """
+    Validate that for non-null Policy rows:
+    If 'Evidence-informed threshold' is answered (non-null),
+    then 'Measurable target' must not be 'No' or 'Unclear'.
+    """
+
+    required_cols = [
+        'Indicators', 'Measures', 'Policies', 'Policy',
+        'Measurable target', 'Evidence-informed threshold'
+    ]
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    # Only consider rows where Policy is not NA
+    df_sub = df[df['Policy'].notna()]
+
+    # Normalise Measurable target values to avoid case/whitespace issues
+    mt = df_sub['Measurable target'].astype(str).str.strip().str.lower()
+
+    inconsistent_mask = (
+        df_sub['Evidence-informed threshold'].notna() &
+        ~mt.isin(['yes'])
+    )
+
+    inconsistent_rows = df_sub[inconsistent_mask]
+
+    if not inconsistent_rows.empty:
+        # Build a concise message referencing the key identifying fields
+        msg_rows = inconsistent_rows[
+            ['Indicators', 'Measures', 'Policies', 'Policy',
+             'Measurable target', 'Evidence-informed threshold']
+        ]
+
+        raise ValueError(
+            "Logical inconsistency found: 'Evidence-informed threshold' is "
+            "answered but 'Measurable target' is not 'Yes'.\n"
+            "Please review the following records:\n"
+            f"{'\n'.join([str(row) for row in msg_rows[['Indicators','Measures','Policies','Policy']].fillna("").to_dict(orient='records')])}"
+        )
+
+
 def get_policy_checklist(xlsx) -> dict:
     """Get and format policy checklist from Excel into series of DataFrames organised by indicator and measure in a dictionary."""
 
@@ -567,13 +611,108 @@ def get_policy_checklist(xlsx) -> dict:
         )
         # Exclude policy heading rows
         df = df.loc[~policy_qualifiers]
+        if df.size==0:
+            print("Loading of policy checklist failed; attempting fallback method to read checklist with legacy formatting.")
+            df = get_policy_checklist_legacy(xlsx)
+        validate_threshold_vs_target(df)
+        return df
+    except Exception as e:
+        print(
+            f'  Error reading policy checklist; please ensure check that this has been completed following the directions.  Specific error: {e}',
+        )
+        return None
+
+
+policies_2023 = {'Indicators': {'Integrated transport and urban planning actions to create healthy and sustainable cities': ['Transport and planning combined in one government department', 'Explicit health-focused actions in urban policy (i.e., explicit mention of health as a goal or rationale for an action)', 'Explicit health-focused actions in transport policy (i.e., explicit mention of health as a goal or rationale for an action)', 'Health Impact Assessment requirements incorporated into urban/transport policy or legislation', 'Urban and/or transport policy explicitly aims for integrated city planning'], 'Limit air pollution from land use and transport': ['Transport policies to limit air pollution', 'Land use policies to reduce air pollution exposure'], 'Priority investment in public and active transport': ['Information on government expenditure on infrastructure for different transport modes'], 'City planning contributes to adaptation and mitigating \xa0the effects of climate change': ['Adaptation and disaster risk reduction strategies'], 'Appropriate context-specific housing densities that encourage walking; including higher density development around activity centres and transport hubs': ['Housing density requirements citywide or within close proximity to transport or town centres', 'Height restrictions on residential buildings (min and/or max)', 'Required urban growth boundary or maximum levels of greenfield housing development'], 'Limit car parking and price parking appropriately for context': ['Parking restrictions to discourage car use'], 'Diverse mix of housing types and local destinations needed for daily living': ['Mixture of local destinations for daily living', 'Mixture of housing types and sizes'], 'Local destinations for healthy, walkable cities': ['Requirements for distance to daily living destinations', 'Requirements for healthy food environments'], 'Crime prevention through urban design principles, manage traffic exposure, and establish urban greening provisions': ['Tree canopy and urban greening requirements', 'Urban biodiversity protection & promotion', 'Traffic safety requirements', 'Crime prevention through environmental design requirements'], 'Create pedestrian- and cycling-friendly neighbourhoods, requiring highly connected street networks; pedestrian and cycling infrastructure provision; and public open space': ['Street connectivity requirements', 'Pedestrian infrastructure provision requirements', 'Cycling infrastructure provision requirements', 'Walking participation targets', 'Cycling participation targets', 'Minimum requirements for public open space access'], 'Coordinated planning for transport, employment and infrastructure that ensures access by public transport': ['Requirements for public transport access to employment and services'], 'A balanced ratio of jobs to housing': ['Employment distribution requirements', 'Requirements for ratio of jobs to housing'], 'Nearby, walkable access to public transport': ['Minimum requirements for public transport access', 'Targets for public transport use']}, 'Checklist': {'Integrated city planning policies for health and sustainability': ['Explicit health-focused actions in transport policy (i.e., explicit mention of health as a goal or rationale for an action)', 'Explicit health-focused actions in urban policy (i.e., explicit mention of health as a goal or rationale for an action)', 'Health Impact Assessment requirements incorporated into urban/transport policy or legislation', 'Urban and/or transport policy explicitly aims for integrated city planning', 'Information on government expenditure on infrastructure for different transport modes'], 'Walkability and destination access related policies': ['Street connectivity requirements', 'Parking restrictions to discourage car use', 'Traffic safety requirements', 'Pedestrian infrastructure provision requirements', 'Cycling infrastructure provision requirements', 'Walking participation targets', 'Cycling participation targets', 'Housing density requirements citywide or within close proximity to transport or town centres', 'Height restrictions on residential buildings (min and/or max)', 'Required urban growth boundary or maximum levels of greenfield housing development', 'Mixture of housing types and sizes', 'Mixture of local destinations for daily living', 'Requirements for distance to daily living destinations', 'Employment distribution requirements', 'Requirements for ratio of jobs to housing', 'Requirements for healthy food environments', 'Crime prevention through environmental design requirements'], 'Public transport policy': ['Requirements for public transport access to employment and services', 'Minimum requirements for public transport access', 'Targets for public transport use'], 'Public open space policy': ['Minimum requirements for public open space access'], 'Urban air quality, and nature-based solutions policies': ['Transport policies to limit air pollution', 'Land use policies to reduce air pollution exposure', 'Tree canopy and urban greening requirements', 'Urban biodiversity protection & promotion'], 'Climate disaster risk reduction policies': ['Adaptation and disaster risk reduction strategies']}}
+    
+
+def get_policy_checklist_legacy(xlsx) -> dict:
+    """Get and format policy checklist from Excel into series of DataFrames organised by indicator and measure in a dictionary."""
+    policies = policies_2023
+    try:
+        df = pd.read_excel(
+            xlsx,
+            sheet_name='Policy Checklist',
+            header=1,
+            usecols='A:N',
+        )
+        df.columns = [
+            'Indicators',
+            'Measures',
+            'Policies',
+            'Policy',
+            'Level of government',
+            'Adoption date',
+            'Citation',
+            'Text',
+            'Mandatory',
+            'Measurable target',
+            'Measurable target text',
+            'Evidence-informed threshold',
+            'Threshold explanation',
+            'Notes',
+        ]
+        # Strip redundant white space (e.g. at start or end of cell values that could impede matching or formatting)
+        df = df.apply(lambda x: x.str.strip() if x.dtype == 'object' else x)
+        # Exclude dataframe rows where an indicator is defined without a corresponding measure
+        # These are short name headings, and this is the quickest way to get rid of them!
+        df = df.query('~(Indicators == Indicators and Measures != Measures)')
+        # Remove the 'Public Open Space Policies' section that is nested within the Walkability section; it doesn't work well with the current formatting
+        df = df.query('~(Measures=="PUBLIC OPEN SPACE POLICIES")')
+        # fill down Indicators column values
+        df.loc[:, 'Indicators'] = df.loc[:, 'Indicators'].ffill()
+        # Only keep measures associated with indicators, replacing 'see also' reference indicators with NA
+        df.loc[:, 'Measures'] = df.apply(
+            lambda x: (
+                x['Measures']
+                if x['Indicators'] in policies['Indicators'].keys()
+                and x['Measures'] in policies['Indicators'][x['Indicators']]
+                else pd.NA
+            ),
+            axis=1,
+        )
+        # fill down Measures column values
+        df.loc[:, 'Measures'] = df.loc[:, 'Measures'].ffill()
+        df = df.loc[~df['Indicators'].isna()]
+        df = df.loc[df['Indicators'] != 'Indicators']
+        df['qualifier'] = (
+            df['Policies']
+            .apply(
+                lambda x: (
+                    x.strip()
+                    if (
+                        str(x).strip() == 'No'
+                        or str(x).strip() == 'Yes'
+                        or str(x).strip() == 'Yes, explicit mention of:'
+                    )
+                    else pd.NA
+                ),
+            )
+            .ffill()
+            .fillna('')
+        )
+        # replace df['qualifier'] with '' where df['Policies'] is in ['Yes','No'] (i.e. where df['Policies'] is a qualifier)
+        df = df.loc[
+            ~df['Policies'].isin(
+                ['', 'No', 'Yes', 'Yes, explicit mention of:'],
+            )
+        ]
+        # Remove measures ending in … (signifies that options are avilable in the subsequent rows)
+        df = df.query('~(Measures.str.endswith("…"))')
+        # df.loc[:, 'Policies'] = df.apply(
+        #     lambda x: x['Policies']
+        #     if x['qualifier'] == ''
+        #     else f"{x['qualifier']}: {x['Policies']}".replace('::', ':'),
+        #     axis=1,
+        # )
+        # df.drop(columns=['qualifier'], inplace=True)
         return df
     except Exception as e:
         print(
             f'  Error reading policy checklist; please ensure these have been completed.  Specific error: {e}',
         )
         return None
-
+    
 
 def get_policy_setting(xlsx) -> dict:
     """Get and format policy checklist from Excel into series of DataFrames organised by indicator and measure in a dictionary."""
@@ -597,29 +736,38 @@ def get_policy_setting(xlsx) -> dict:
             'value',
         ].values[0]
         setting['Date'] = df.loc[
-            df['item'] == 'Date completed:',
+            df['item'].str.replace(":", "") == 'Date completed',
             'value',
         ].values[0]
         try:
             setting['Date'] = setting['Date'].strftime('%Y')
         except Exception:
             pass
+        if "City, region and country the checklist has been used for:" in df['item'].values:
+            location_details = 'location'
+            setting['Levels of government'] = ', '.join([
+                x for x in df.loc[df.value.notna()].loc[
+                    df.item=="Names of level(s) of government policy included the policy checklist",'location'
+                ] if not x.startswith('Other')
+            ])
+        else:
+            location_details = 'item'
+            setting['Levels of government'] = df.loc[
+                df['item'].str.startswith(
+                    'Governments included in the policy checklist:',
+                ),
+                'value',
+            ].values[0]
         setting['City'] = df.loc[
-            df['item'] == 'City:',
+            df[location_details].str.replace(":", "") == 'City',
             'value',
         ].values[0]
         setting['Region'] = df.loc[
-            df['item'] == 'State/province/county/region:',
+            df[location_details].str.replace(":", "").str.lower().str.endswith('region').fillna(False),
             'value',
         ].values[0]
         setting['Country'] = df.loc[
-            df['item'] == 'Country:',
-            'value',
-        ].values[0]
-        setting['Levels of government'] = df.loc[
-            df['item'].str.startswith(
-                'Governments included in the policy checklist:',
-            ),
+            df[location_details].str.replace(":", "") == 'Country',
             'value',
         ].values[0]
         setting['Environmental disaster context'] = {}
@@ -641,7 +789,7 @@ def get_policy_setting(xlsx) -> dict:
                 'value',
             ].values[0]
         setting['Environmental disaster context']['Other'] = df.loc[
-            df['item'] == 'Other (please specify)',
+            df[location_details] == 'Other (please specify)',
             'value',
         ].values[0]
         setting['Environmental disaster context'] = '\n'.join(
@@ -651,9 +799,8 @@ def get_policy_setting(xlsx) -> dict:
                 if str(setting['Environmental disaster context'][x]) != 'nan'
             ],
         )
-        
         # Extract City context if available
-        city_context_rows = df.loc[df['item'].str.strip() == 'City context', 'value']
+        city_context_rows = df.loc[df[location_details].str.strip() == 'City context', 'value']
         if len(city_context_rows) > 0:
             setting['City context'] = city_context_rows.values[0]
             if pd.isna(setting['City context']):
@@ -662,14 +809,13 @@ def get_policy_setting(xlsx) -> dict:
             setting['City context'] = ''
         
         # Extract Demographics and health equity if available
-        demographics_rows = df.loc[df['item'].str.strip() == 'Demographics and health equity', 'value']
+        demographics_rows = df.loc[df[location_details].str.strip() == 'Demographics and health equity', 'value']
         if len(demographics_rows) > 0:
             setting['Demographics and health equity'] = demographics_rows.values[0]
             if pd.isna(setting['Demographics and health equity']):
                 setting['Demographics and health equity'] = ''
         else:
             setting['Demographics and health equity'] = ''
-        
         for x in setting:
             if setting[x] == '':
                 setting[x] = 'Not specified'
