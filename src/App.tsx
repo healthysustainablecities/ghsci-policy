@@ -223,6 +223,7 @@ function App() {
           <h1>Global Healthy and Sustainable Cities</h1>
           <h2>Policy Report Generator</h2>
           <p>A tool to support analysis and reporting of policy indicators for the Global Observatory of Healthy and Sustainable Cities' <a href="https://www.healthysustainablecities.org/1000cities/" target="_blank" rel="noopener noreferrer">1000 Cities Challenge</a>.</p>
+          <p>This proof-of-concept application is under active development, and reporting may have limitations. Backwards compatibility with legacy checklists (prior to version 2.0.0) is not guaranteed.</p>
         </div>
         
         <SignOutIcon title={user?.signInDetails?.loginId || undefined}/>

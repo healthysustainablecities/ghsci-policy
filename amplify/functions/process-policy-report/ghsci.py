@@ -17,7 +17,98 @@ configuration_xlsx = os.path.join(os.environ['LAMBDA_TASK_ROOT'], '_report_confi
 languages = pd.read_excel(configuration_xlsx, sheet_name='languages').fillna('')
 indicators = {'report': {'policy': {'analyses': ['Presence', 'Checklist', 'POS', 'PT']}}}
 
-policies = {'Indicators': {'Integrated city planning policies for health and sustainability': ['Transport and planning combined in one government department', "Transport policy with health-focused actions (i.e., explicit mention of the word 'health', 'wellbeing' or similar, as a goal or rationale for an action)", "Urban policy with health-focused actions (i.e., explicit mention of the word 'health', 'wellbeing' or similar, as a goal or rationale for an action)", 'Health Impact Assessment (i.e., evaluating potential impacts of policies/plans on population health) requirements in urban/transport policy or legislation', 'Urban and/or transport policy explicitly aims for integrated city planning', 'Publicly available information on government expenditure for different transport modes'], 'Walkability and destination access policies': ['Walking participation', 'Pedestrian infrastructure', 'Cycling participation', 'Cycling infrastructure', 'Traffic safety', 'Parking restrictions to discourage car use', 'Street connectivity', 'Housing or population density', 'Residential building heights', 'Limits on greenfield housing development', 'Mixture of housing types/sizes', 'Mixture of local destinations for daily living', 'Close distance to daily living destinations', 'Healthy food environments', 'Crime prevention through environmental design', 'Employment distribution', 'Ratio of jobs to housing'], 'Public transport policies': ['Access to employment and services via public transport', 'Public transport access', 'Public transport use'], 'Public open space policies': ['Public open space access'], 'Nature-based solutions policies': ['Tree canopy and urban greening', 'Urban biodiversity protection & promotion'], 'Urban air quality policies': ['Transport policies to limit air pollution', 'Land use policies to reduce air pollution exposure'], 'Climate disaster risk reduction policies': ['Adaptation and disaster risk reduction']}, 'Checklist': {'Integrated city planning policies for health and sustainability': ["Transport policy with health-focused actions (i.e., explicit mention of the word 'health', 'wellbeing' or similar, as a goal or rationale for an action)", "Urban policy with health-focused actions (i.e., explicit mention of the word 'health', 'wellbeing' or similar, as a goal or rationale for an action)", 'Health Impact Assessment (i.e., evaluating potential impacts of policies/plans on population health) requirements in urban/transport policy or legislation', 'Urban and/or transport policy explicitly aims for integrated city planning', 'Publicly available information on government expenditure for different transport modes'], 'Walkability and destination access policies': ['Walking participation', 'Pedestrian infrastructure', 'Cycling participation', 'Cycling infrastructure', 'Traffic safety', 'Parking restrictions to discourage car use', 'Street connectivity', 'Housing or population density', 'Residential building heights', 'Limits on greenfield housing development', 'Mixture of housing types/sizes', 'Mixture of local destinations for daily living', 'Close distance to daily living destinations', 'Healthy food environments', 'Crime prevention through environmental design', 'Employment distribution', 'Ratio of jobs to housing'], 'Public transport policies': ['Access to employment and services via public transport', 'Public transport access', 'Public transport use'], 'Public open space policies': ['Public open space access'], 'Nature-based solutions policies': ['Tree canopy and urban greening', 'Urban biodiversity protection & promotion'], 'Urban air quality policies': ['Transport policies to limit air pollution', 'Land use policies to reduce air pollution exposure'], 'Climate disaster risk reduction policies': ['Adaptation and disaster risk reduction']}}
+ghsci_policies = {'Indicators': {'Integrated city planning policies for health and sustainability': ['Transport and planning combined in one government department', "Transport policy with health-focused actions (i.e., explicit mention of the word 'health', 'wellbeing' or similar, as a goal or rationale for an action)", "Urban policy with health-focused actions (i.e., explicit mention of the word 'health', 'wellbeing' or similar, as a goal or rationale for an action)", 'Health Impact Assessment (i.e., evaluating potential impacts of policies/plans on population health) requirements in urban/transport policy or legislation', 'Urban and/or transport policy explicitly aims for integrated city planning', 'Publicly available information on government expenditure for different transport modes'], 'Walkability and destination access policies': ['Walking participation', 'Pedestrian infrastructure', 'Cycling participation', 'Cycling infrastructure', 'Traffic safety', 'Parking restrictions to discourage car use', 'Street connectivity', 'Housing or population density', 'Residential building heights', 'Limits on greenfield housing development', 'Mixture of housing types/sizes', 'Mixture of local destinations for daily living', 'Close distance to daily living destinations', 'Healthy food environments', 'Crime prevention through environmental design', 'Employment distribution', 'Ratio of jobs to housing'], 'Public transport policies': ['Access to employment and services via public transport', 'Public transport access', 'Public transport use'], 'Public open space policies': ['Public open space access'], 'Nature-based solutions policies': ['Tree canopy and urban greening', 'Urban biodiversity protection & promotion'], 'Urban air quality policies': ['Transport policies to limit air pollution', 'Land use policies to reduce air pollution exposure'], 'Climate disaster risk reduction policies': ['Adaptation and disaster risk reduction']}, 'Checklist': {'Integrated city planning policies for health and sustainability': ["Transport policy with health-focused actions (i.e., explicit mention of the word 'health', 'wellbeing' or similar, as a goal or rationale for an action)", "Urban policy with health-focused actions (i.e., explicit mention of the word 'health', 'wellbeing' or similar, as a goal or rationale for an action)", 'Health Impact Assessment (i.e., evaluating potential impacts of policies/plans on population health) requirements in urban/transport policy or legislation', 'Urban and/or transport policy explicitly aims for integrated city planning', 'Publicly available information on government expenditure for different transport modes'], 'Walkability and destination access policies': ['Walking participation', 'Pedestrian infrastructure', 'Cycling participation', 'Cycling infrastructure', 'Traffic safety', 'Parking restrictions to discourage car use', 'Street connectivity', 'Housing or population density', 'Residential building heights', 'Limits on greenfield housing development', 'Mixture of housing types/sizes', 'Mixture of local destinations for daily living', 'Close distance to daily living destinations', 'Healthy food environments', 'Crime prevention through environmental design', 'Employment distribution', 'Ratio of jobs to housing'], 'Public transport policies': ['Access to employment and services via public transport', 'Public transport access', 'Public transport use'], 'Public open space policies': ['Public open space access'], 'Nature-based solutions policies': ['Tree canopy and urban greening', 'Urban biodiversity protection & promotion'], 'Urban air quality policies': ['Transport policies to limit air pollution', 'Land use policies to reduce air pollution exposure'], 'Climate disaster risk reduction policies': ['Adaptation and disaster risk reduction']}}
+
+policies_2023 = {'Indicators': {'Integrated transport and urban planning actions to create healthy and sustainable cities': ['Transport and planning combined in one government department', 'Explicit health-focused actions in urban policy (i.e., explicit mention of health as a goal or rationale for an action)', 'Explicit health-focused actions in transport policy (i.e., explicit mention of health as a goal or rationale for an action)', 'Health Impact Assessment requirements incorporated into urban/transport policy or legislation', 'Urban and/or transport policy explicitly aims for integrated city planning'], 'Limit air pollution from land use and transport': ['Transport policies to limit air pollution', 'Land use policies to reduce air pollution exposure'], 'Priority investment in public and active transport': ['Information on government expenditure on infrastructure for different transport modes'], 'City planning contributes to adaptation and mitigating \xa0the effects of climate change': ['Adaptation and disaster risk reduction strategies'], 'Appropriate context-specific housing densities that encourage walking; including higher density development around activity centres and transport hubs': ['Housing density requirements citywide or within close proximity to transport or town centres', 'Height restrictions on residential buildings (min and/or max)', 'Required urban growth boundary or maximum levels of greenfield housing development'], 'Limit car parking and price parking appropriately for context': ['Parking restrictions to discourage car use'], 'Diverse mix of housing types and local destinations needed for daily living': ['Mixture of local destinations for daily living', 'Mixture of housing types and sizes'], 'Local destinations for healthy, walkable cities': ['Requirements for distance to daily living destinations', 'Requirements for healthy food environments'], 'Crime prevention through urban design principles, manage traffic exposure, and establish urban greening provisions': ['Tree canopy and urban greening requirements', 'Urban biodiversity protection & promotion', 'Traffic safety requirements', 'Crime prevention through environmental design requirements'], 'Create pedestrian- and cycling-friendly neighbourhoods, requiring highly connected street networks; pedestrian and cycling infrastructure provision; and public open space': ['Street connectivity requirements', 'Pedestrian infrastructure provision requirements', 'Cycling infrastructure provision requirements', 'Walking participation targets', 'Cycling participation targets', 'Minimum requirements for public open space access'], 'Coordinated planning for transport, employment and infrastructure that ensures access by public transport': ['Requirements for public transport access to employment and services'], 'A balanced ratio of jobs to housing': ['Employment distribution requirements', 'Requirements for ratio of jobs to housing'], 'Nearby, walkable access to public transport': ['Minimum requirements for public transport access', 'Targets for public transport use']}, 'Checklist': {'Integrated city planning policies for health and sustainability': ['Explicit health-focused actions in transport policy (i.e., explicit mention of health as a goal or rationale for an action)', 'Explicit health-focused actions in urban policy (i.e., explicit mention of health as a goal or rationale for an action)', 'Health Impact Assessment requirements incorporated into urban/transport policy or legislation', 'Urban and/or transport policy explicitly aims for integrated city planning', 'Information on government expenditure on infrastructure for different transport modes'], 'Walkability and destination access related policies': ['Street connectivity requirements', 'Parking restrictions to discourage car use', 'Traffic safety requirements', 'Pedestrian infrastructure provision requirements', 'Cycling infrastructure provision requirements', 'Walking participation targets', 'Cycling participation targets', 'Housing density requirements citywide or within close proximity to transport or town centres', 'Height restrictions on residential buildings (min and/or max)', 'Required urban growth boundary or maximum levels of greenfield housing development', 'Mixture of housing types and sizes', 'Mixture of local destinations for daily living', 'Requirements for distance to daily living destinations', 'Employment distribution requirements', 'Requirements for ratio of jobs to housing', 'Requirements for healthy food environments', 'Crime prevention through environmental design requirements'], 'Public transport policy': ['Requirements for public transport access to employment and services', 'Minimum requirements for public transport access', 'Targets for public transport use'], 'Public open space policy': ['Minimum requirements for public open space access'], 'Urban air quality, and nature-based solutions policies': ['Transport policies to limit air pollution', 'Land use policies to reduce air pollution exposure', 'Tree canopy and urban greening requirements', 'Urban biodiversity protection & promotion'], 'Climate disaster risk reduction policies': ['Adaptation and disaster risk reduction strategies']}}
+
+def get_policies(version):
+    if version is None:
+        raise ValueError('Unable to determine version of policy checklist; please check the configured document is complete and includes the version number to proceed.')
+    elif version < '2.0.0':
+        return policies_2023
+    else:
+        return ghsci_policies
+
+# 1) Indicator (group) name mapping: 2023 checklist → new checklist
+checklist_indicator_map_2023_to_new = {
+    'Integrated city planning policies for health and sustainability':
+        'Integrated city planning policies for health and sustainability',
+    'Walkability and destination access related policies':
+        'Walkability and destination access policies',
+    'Public transport policy':
+        'Public transport policies',
+    'Public open space policy':
+        'Public open space policies',
+    'Urban air quality, and nature-based solutions policies':
+        # in the new schema these are split, but from the checklist POV
+        # you can still map them primarily to Urban air quality policies
+        'Urban air quality policies',
+    'Climate disaster risk reduction policies':
+        'Climate disaster risk reduction policies',
+}
+
+# 2) Measure / item mapping: 2023 wording → new wording
+checklist_measure_map_2023_to_new = {
+    # Integrated city planning
+    'Explicit health-focused actions in transport policy (i.e., explicit mention of health as a goal or rationale for an action)':
+        "Transport policy with health-focused actions (i.e., explicit mention of the word 'health', 'wellbeing' or similar, as a goal or rationale for an action)",
+    'Explicit health-focused actions in urban policy (i.e., explicit mention of health as a goal or rationale for an action)':
+        "Urban policy with health-focused actions (i.e., explicit mention of the word 'health', 'wellbeing' or similar, as a goal or rationale for an action)",
+    'Health Impact Assessment requirements incorporated into urban/transport policy or legislation':
+        'Health Impact Assessment (i.e., evaluating potential impacts of policies/plans on population health) requirements in urban/transport policy or legislation',
+    'Information on government expenditure on infrastructure for different transport modes':
+        'Publicly available information on government expenditure for different transport modes',
+
+    # Walkability & housing & destinations
+    'Street connectivity requirements': 'Street connectivity',
+    'Parking restrictions to discourage car use': 'Parking restrictions to discourage car use',
+    'Traffic safety requirements': 'Traffic safety',
+    'Pedestrian infrastructure provision requirements': 'Pedestrian infrastructure',
+    'Cycling infrastructure provision requirements': 'Cycling infrastructure',
+    'Walking participation targets': 'Walking participation',
+    'Cycling participation targets': 'Cycling participation',
+    'Housing density requirements citywide or within close proximity to transport or town centres':
+        'Housing or population density',
+    'Height restrictions on residential buildings (min and/or max)':
+        'Residential building heights',
+    'Required urban growth boundary or maximum levels of greenfield housing development':
+        'Limits on greenfield housing development',
+    'Mixture of housing types and sizes': 'Mixture of housing types/sizes',
+    'Mixture of local destinations for daily living': 'Mixture of local destinations for daily living',
+    'Requirements for distance to daily living destinations': 'Close distance to daily living destinations',
+    'Employment distribution requirements': 'Employment distribution',
+    'Requirements for ratio of jobs to housing': 'Ratio of jobs to housing',
+    'Requirements for healthy food environments': 'Healthy food environments',
+    'Crime prevention through environmental design requirements': 'Crime prevention through environmental design',
+
+    # Public transport
+    'Requirements for public transport access to employment and services':
+        'Access to employment and services via public transport',
+    'Minimum requirements for public transport access': 'Public transport access',
+    'Targets for public transport use': 'Public transport use',
+
+    # Public open space
+    'Minimum requirements for public open space access': 'Public open space access',
+
+    # Air quality / nature-based
+    'Transport policies to limit air pollution': 'Transport policies to limit air pollution',
+    'Land use policies to reduce air pollution exposure': 'Land use policies to reduce air pollution exposure',
+    'Tree canopy and urban greening requirements': 'Tree canopy and urban greening',
+    'Urban biodiversity protection & promotion': 'Urban biodiversity protection & promotion',
+
+    # Climate
+    'Adaptation and disaster risk reduction strategies': 'Adaptation and disaster risk reduction',
+}
+
+# 3) override which new indicator a particular measure belongs to (if
+# the indicator group alone is not enough to route it correctly).
+checklist_measure_indicator_override = {
+    # Split the combined "Urban air quality, and nature-based solutions" category:
+    'Tree canopy and urban greening requirements': 'Nature-based solutions policies',
+    'Urban biodiversity protection & promotion': 'Nature-based solutions policies',
+    'Transport policies to limit air pollution': 'Urban air quality policies',
+    'Land use policies to reduce air pollution exposure': 'Urban air quality policies',
+}
 
 config = {'name': None, 'codename': None, 'country': None, 'country_code': None, 'continent': None, 'year': None, 'policy_review': None, 'notes': None, 'reporting': {'templates': ['policy'], 'publication_ready': True, 'doi': '', 'images': {1: {'file': 'Example image of a vibrant, walkable, urban neighbourhood - landscape.jpg', 'description': 'Example image of a vibrant, walkable, urban neighbourhood with diverse people using active modes of transport and a tram (replace with a photograph, customised in region configuration)', 'credit': 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Carl Higgs, Bing Image Creator, 2023'}, 2: {'file': 'Example image 2-Landscape.jpg', 'description': 'Example image of a vibrant, walkable, urban area (replace with a photograph or your own image, customised in region configuration)', 'credit': 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Eugen Resendiz, Bing Image Creator, 2023'}, 3: {'file': 'Example image of a vibrant, walkable, urban neighbourhood - square.jpg', 'description': 'Example image of a vibrant, walkable, urban neighbourhood with diverse people using active modes of transport and a tram (replace with a photograph, customised in region configuration)', 'credit': 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Carl Higgs, Bing Image Creator, 2023'}, 4: {'file': 'Example image of climate resilient lively city watercolor-Square.jpg', 'description': 'Example image of a climate-resilient, lively city (replace with an image for your city, customised in region configuration)', 'credit': 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Eugen Resendiz, Bing Image Creator, 2023'}}, 'languages': {'English': {'name': 'Las Palmas de Gran Canaria', 'country': 'Spain', 'summary_policy': 'After reviewing policy indicator results for your city, provide a contextualised summary by modifying the "summary_policy" text for each configured language within the region configuration file.\n', 'summary_spatial': 'After reviewing spatial indicator results for your city, provide a contextualised summary by modifying the "summary_spatial" text for each configured language within the region configuration file.\n', 'summary_policy_spatial': 'After reviewing both the policy and spatial indicator results for your city, provide a contextualised summary by modifying the "summary_policy_spatial" text for each configured language within the region configuration file.\n', 'context': [{'City context': [{'summary': 'Provide background context for your study region, for example, a brief summary of the location, history and topography, as relevant.'}]}, {'Demographics and health equity': [{'summary': ''}]}, {'Environmental disaster context': [{'summary': ''}]}, {'Levels of government': [{'summary': ''}]}, {'Additional context': [{'summary': ''}]}]}}, 'exceptions': {}, '__version__': '4.10.5', 'folder_path': '/home/ghsci', 'date_hhmm': '', 'authors': None, 'configuration': configuration_xlsx},'folder_path': os.environ.get('LAMBDA_TASK_ROOT', os.path.dirname(__file__))}
 
@@ -176,6 +267,8 @@ def generate_online_policy_report(
 ):
     """Generate a policy report for a completed policy checklist."""    
     policy_setting = get_policy_setting(checklist)
+    if policy_setting['Checklist version'] is None:
+        raise ValueError('Unable to determine version of policy checklist; please check the configured document is complete and includes the version number in cell A1 to proceed.')
     if 'language' not in options:
         print('No language specified; defaulting to English.')
         language = 'English'
@@ -359,6 +452,8 @@ def _checklist_policy_measurable(policy):
 
 def policy_data_setup(xlsx: str):
     """Returns a dictionary of policy data."""
+    # setting = get_policy_setting(xlsx)
+    policies = ghsci_policies
     # get list of all valid measures
     measures = [
         measure
@@ -557,76 +652,83 @@ def get_policy_checklist(xlsx) -> dict:
     """Get and format policy checklist from Excel into series of DataFrames organised by indicator and measure in a dictionary."""
 
     try:
-        df = pd.read_excel(
-            xlsx,
-            sheet_name='Policy Checklist',
-            header=2,
-            usecols='A:M',
-        )
-        df.columns = [
-            'Measures',
-            'Policies',
-            'Policy',
-            'Level of government',
-            'Adoption date',
-            'Citation',
-            'Text',
-            'Mandatory',
-            'Measurable target',
-            'Measurable target text',
-            'Evidence-informed threshold',
-            'Threshold explanation',
-            'Notes',
-        ]
-        df.insert(
-            0,
-            'Indicators',
-            [
-                x if x in policies['Indicators'].keys() else pd.NA
-                for x in df['Measures']
-            ],
-        )
-        # Strip redundant white space (e.g. at start or end of cell values that could impede matching or formatting)
-        df = df.apply(lambda x: x.str.strip() if x.dtype == 'object' else x)
-        # fill down Indicators column values
-        df.loc[:, ['Indicators', 'Measures']] = df.loc[
-            :,
-            ['Indicators', 'Measures'],
-        ].ffill()
-        # Exclude rows with NA for indicators
-        df = df.loc[~df['Indicators'].isna()]
-        # Exclude dataframe rows where indicators match measures (i.e. section headers)
-        df = df.query('~(Indicators==Measures)').copy()
-        # Add qualifier for evaluating policy polarity when scoring
-        policy_qualifiers = (
-            df['Policies'].isin([''])
-            | df['Policies'].str.startswith('No')
-            | df['Policies'].str.startswith('Yes')
-        )
-        df['qualifier'] = (
-            df['Policies']
-            .where(policy_qualifiers)
-            .str.split(',')
-            .str[0]
-            .ffill()
-            .fillna('')
-        )
-        # Exclude policy heading rows
-        df = df.loc[~policy_qualifiers]
-        if df.size==0:
-            print("Loading of policy checklist failed; attempting fallback method to read checklist with legacy formatting.")
+        setting = get_policy_setting(xlsx)
+        if setting['Checklist version'] is None:
+            print(
+                'Unable to determine version of policy checklist; please check the configured document is complete and includes the version number in cell A1 to proceed. Policy checklist evaluation will be skipped.',
+            )
+            return None
+        elif setting['Checklist version'] < '2.0.0':
+            print("Checklist version is older than 2.0.0; attempting to read using legacy format.  Please check results carefully to confirm these are represented as intended.")
             df = get_policy_checklist_legacy(xlsx)
+        else:
+            policies = ghsci_policies
+            df = pd.read_excel(
+                xlsx,
+                sheet_name='Policy Checklist',
+                header=2,
+                usecols='A:M',
+            )
+            df.columns = [
+                'Measures',
+                'Policies',
+                'Policy',
+                'Level of government',
+                'Adoption date',
+                'Citation',
+                'Text',
+                'Mandatory',
+                'Measurable target',
+                'Measurable target text',
+                'Evidence-informed threshold',
+                'Threshold explanation',
+                'Notes',
+            ]
+            df.insert(
+                0,
+                'Indicators',
+                [
+                    x if x in policies['Indicators'].keys() else pd.NA
+                    for x in df['Measures']
+                ],
+            )
+            # Strip redundant white space (e.g. at start or end of cell values that could impede matching or formatting)
+            df = df.apply(lambda x: x.str.strip() if x.dtype == 'object' else x)
+            # fill down Indicators column values
+            df.loc[:, ['Indicators', 'Measures']] = df.loc[
+                :,
+                ['Indicators', 'Measures'],
+            ].ffill()
+            # Exclude rows with NA for indicators
+            df = df.loc[~df['Indicators'].isna()]
+            # Exclude dataframe rows where indicators match measures (i.e. section headers)
+            df = df.query('~(Indicators==Measures)').copy()
+            # Add qualifier for evaluating policy polarity when scoring
+            policy_qualifiers = (
+                df['Policies'].isin([''])
+                | df['Policies'].str.startswith('No')
+                | df['Policies'].str.startswith('Yes')
+            )
+            df['qualifier'] = (
+                df['Policies']
+                .where(policy_qualifiers)
+                .str.split(',')
+                .str[0]
+                .ffill()
+                .fillna('')
+            )
+            # Exclude policy heading rows
+            df = df.loc[~policy_qualifiers]
         validate_threshold_vs_target(df)
         return df
+    except ValueError:
+        raise
     except Exception as e:
         print(
             f'  Error reading policy checklist; please ensure check that this has been completed following the directions.  Specific error: {e}',
         )
         return None
 
-
-policies_2023 = {'Indicators': {'Integrated transport and urban planning actions to create healthy and sustainable cities': ['Transport and planning combined in one government department', 'Explicit health-focused actions in urban policy (i.e., explicit mention of health as a goal or rationale for an action)', 'Explicit health-focused actions in transport policy (i.e., explicit mention of health as a goal or rationale for an action)', 'Health Impact Assessment requirements incorporated into urban/transport policy or legislation', 'Urban and/or transport policy explicitly aims for integrated city planning'], 'Limit air pollution from land use and transport': ['Transport policies to limit air pollution', 'Land use policies to reduce air pollution exposure'], 'Priority investment in public and active transport': ['Information on government expenditure on infrastructure for different transport modes'], 'City planning contributes to adaptation and mitigating \xa0the effects of climate change': ['Adaptation and disaster risk reduction strategies'], 'Appropriate context-specific housing densities that encourage walking; including higher density development around activity centres and transport hubs': ['Housing density requirements citywide or within close proximity to transport or town centres', 'Height restrictions on residential buildings (min and/or max)', 'Required urban growth boundary or maximum levels of greenfield housing development'], 'Limit car parking and price parking appropriately for context': ['Parking restrictions to discourage car use'], 'Diverse mix of housing types and local destinations needed for daily living': ['Mixture of local destinations for daily living', 'Mixture of housing types and sizes'], 'Local destinations for healthy, walkable cities': ['Requirements for distance to daily living destinations', 'Requirements for healthy food environments'], 'Crime prevention through urban design principles, manage traffic exposure, and establish urban greening provisions': ['Tree canopy and urban greening requirements', 'Urban biodiversity protection & promotion', 'Traffic safety requirements', 'Crime prevention through environmental design requirements'], 'Create pedestrian- and cycling-friendly neighbourhoods, requiring highly connected street networks; pedestrian and cycling infrastructure provision; and public open space': ['Street connectivity requirements', 'Pedestrian infrastructure provision requirements', 'Cycling infrastructure provision requirements', 'Walking participation targets', 'Cycling participation targets', 'Minimum requirements for public open space access'], 'Coordinated planning for transport, employment and infrastructure that ensures access by public transport': ['Requirements for public transport access to employment and services'], 'A balanced ratio of jobs to housing': ['Employment distribution requirements', 'Requirements for ratio of jobs to housing'], 'Nearby, walkable access to public transport': ['Minimum requirements for public transport access', 'Targets for public transport use']}, 'Checklist': {'Integrated city planning policies for health and sustainability': ['Explicit health-focused actions in transport policy (i.e., explicit mention of health as a goal or rationale for an action)', 'Explicit health-focused actions in urban policy (i.e., explicit mention of health as a goal or rationale for an action)', 'Health Impact Assessment requirements incorporated into urban/transport policy or legislation', 'Urban and/or transport policy explicitly aims for integrated city planning', 'Information on government expenditure on infrastructure for different transport modes'], 'Walkability and destination access related policies': ['Street connectivity requirements', 'Parking restrictions to discourage car use', 'Traffic safety requirements', 'Pedestrian infrastructure provision requirements', 'Cycling infrastructure provision requirements', 'Walking participation targets', 'Cycling participation targets', 'Housing density requirements citywide or within close proximity to transport or town centres', 'Height restrictions on residential buildings (min and/or max)', 'Required urban growth boundary or maximum levels of greenfield housing development', 'Mixture of housing types and sizes', 'Mixture of local destinations for daily living', 'Requirements for distance to daily living destinations', 'Employment distribution requirements', 'Requirements for ratio of jobs to housing', 'Requirements for healthy food environments', 'Crime prevention through environmental design requirements'], 'Public transport policy': ['Requirements for public transport access to employment and services', 'Minimum requirements for public transport access', 'Targets for public transport use'], 'Public open space policy': ['Minimum requirements for public open space access'], 'Urban air quality, and nature-based solutions policies': ['Transport policies to limit air pollution', 'Land use policies to reduce air pollution exposure', 'Tree canopy and urban greening requirements', 'Urban biodiversity protection & promotion'], 'Climate disaster risk reduction policies': ['Adaptation and disaster risk reduction strategies']}}
-    
 
 def get_policy_checklist_legacy(xlsx) -> dict:
     """Get and format policy checklist from Excel into series of DataFrames organised by indicator and measure in a dictionary."""
@@ -701,13 +803,32 @@ def get_policy_checklist_legacy(xlsx) -> dict:
         ]
         # Remove measures ending in … (signifies that options are avilable in the subsequent rows)
         df = df.query('~(Measures.str.endswith("…"))')
-        # df.loc[:, 'Policies'] = df.apply(
-        #     lambda x: x['Policies']
-        #     if x['qualifier'] == ''
-        #     else f"{x['qualifier']}: {x['Policies']}".replace('::', ':'),
-        #     axis=1,
-        # )
-        # df.drop(columns=['qualifier'], inplace=True)
+        
+
+        # 1. Map old indicator names → new indicator names
+        df['Indicators'] = df['Indicators'].map(
+            lambda x: checklist_indicator_map_2023_to_new.get(x, x)
+        )
+
+        # 2. Map old measures → new wording
+        df['Measures'] = df['Measures'].map(
+            lambda x: checklist_measure_map_2023_to_new.get(x, x)
+        )
+
+        # 3. Override indicator for specific measures to split air quality vs nature-based
+        def override_indicator(row):
+            m = row['Measures']
+            if m in checklist_measure_indicator_override:
+                return checklist_measure_indicator_override[m]
+            return row['Indicators']
+
+        df['Indicators'] = df.apply(override_indicator, axis=1)
+
+        # (Optional) remove duplicates that might arise from merging categories
+        df = df.drop_duplicates(
+            subset=['Indicators', 'Measures', 'Policies', 'Policy', 'Level of government', 'Citation'],
+            keep='first',
+        )
         return df
     except Exception as e:
         print(
@@ -725,10 +846,13 @@ def get_policy_setting(xlsx) -> dict:
                 'Policy checklist collection details appear not to have completed (no values found in column C); please check the specified file has been completed.',
             )
             return None
+        setting = {}
+        # Get version of checklist
+        version = pd.read_excel(xlsx, sheet_name='Policy Checklist').iloc[0,0]
+        setting['Checklist version'] = version.replace('version ', '').strip() if isinstance(version, str) else 'Unknown'
         # Strip redundant white space (e.g. at start or end of cell values that could impede matching or formatting)
         df.columns = ['item', 'location', 'value']
         df.loc[:, 'item'] = df.loc[:, 'item'].ffill()
-        setting = {}
         setting['Person(s)'] = df.loc[
             df['item'] == 'Name of person(s) completing checklist:',
             'value',
@@ -906,7 +1030,7 @@ class PDF_Policy_Report(FPDF):
 
     def generate_policy_report(self):
         """Generate analysis report."""
-        file_path = generate_policy_report(self.file)
+        file_path = generate_online_policy_report(self.file)
         return file_path
     
 ################
@@ -1318,6 +1442,8 @@ def _pdf_insert_accessibility_policy(pdf, pages, phrases):
 
     pdf.add_page()
     indicator = 'Walkability and destination access policies'
+    # policies = get_policies(setting['Checklist version'])
+    policies = ghsci_policies
     indicator_index = list(policies['Checklist'].keys()).index(indicator)
     if config['pdf']['policy_review'] is not None:
         template = format_template_policy_checklist(

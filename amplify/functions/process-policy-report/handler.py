@@ -160,7 +160,7 @@ def handler(event, context):
         
         # Update status to FAILED
         try:
-            display_error = error_message[:500]
+            display_error = error_message[:4000]
             print(f"Updating status to FAILED with error: {display_error}")
             update_report_status(key, 'FAILED', error_message=display_error)
             print("Status updated successfully to FAILED")
@@ -199,7 +199,7 @@ def handler(event, context):
                 error_message = f"{exc_type}: An error occurred but no details were provided"
             
             # Limit error message length for database (DynamoDB has size limits)
-            display_error = error_message[:500] if len(error_message) > 500 else error_message
+            display_error = error_message[:4000] if len(error_message) > 4000 else error_message
             
             print(f"Updating status to FAILED with error: {display_error}")
             update_report_status(key, 'FAILED', error_message=display_error)
