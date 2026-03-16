@@ -42,8 +42,13 @@ def parse_excel_config(excel_file_path):
         demographics = setting.get('Demographics and health equity', '')
         
         # Build reportConfig in the format expected by the frontend
+        # Top-level convenience fields for the frontend card/modal display
         # Use default placeholder images from ghsci.py config
         config = {
+            'city': city,
+            'country': country,
+            'year': str(setting.get('Date', '') or ''),
+            'reviewer': str(setting.get('Person(s)', '') or ''),
             'reporting': {
                 'doi': '',
                 'images': {
@@ -72,7 +77,7 @@ def parse_excel_config(excel_file_path):
                         'context': [
                             {
                                 'City context': [
-                                    {'summary': city_context if city_context and city_context != 'Not specified' else f'Contextual information about {city}, {region}, {country}.'.replace(', , ', ', ') if any([city, region, country]) else 'Contextual information about your study region.'}
+                                    {'summary': city_context if city_context and city_context != 'Not specified' else f'Contextual information about {city}, {country}.'.replace(', , ', ', ') if any([city, country]) else 'Contextual information about your study region.'}
                                 ]
                             },
                             {

@@ -40,6 +40,83 @@ const sanitizeUserId = (userId: string): string => {
   return userId.replace(/[^a-zA-Z0-9-]/g, '').substring(0, 50);
 };
 
+// ── Data helpers ─────────────────────────────────────────────────────────────
+
+const parsePolicyData = (
+  report: Schema["PolicyReport"]["type"]
+): Record<string, Record<string, { identified: string; aligns: string; measurable: string }>> | null => {
+  if (!report.policyData) return null;
+  try {
+    let data: any = report.policyData;
+    while (typeof data === 'string') data = JSON.parse(data);
+    return data;
+  } catch {
+    return null;
+  }
+};
+
+const parseReportMeta = (
+  report: Schema["PolicyReport"]["type"]
+): { city: string | null; country: string | null; reviewer: string | null; year: string | null } => {
+  const empty = { city: null, country: null, reviewer: null, year: null };
+  if (!report.reportConfig) return empty;
+  try {
+    let cfg: any = report.reportConfig;
+    while (typeof cfg === 'string') cfg = JSON.parse(cfg);
+    const lang = cfg?.reporting?.languages?.English;
+    return {
+      city: cfg?.city || lang?.name || null,
+      country: cfg?.country || lang?.country || null,
+      reviewer: cfg?.reviewer || cfg?.reporting?.exceptions?.English?.author_names || null,
+      year: cfg?.year || null,
+    };
+  } catch {
+    return empty;
+  }
+};
+
+const EXCLUDED_MEASURE = 'Transport and planning combined in one government department';
+const ALIGN_SCORE: Record<string, number> = { '✔': 1, '✔/✘': -0.5, '✘': -1 };
+const MEASURABLE_SCORE: Record<string, number> = { '✔': 2, '✘': 1, '-': 0 };
+
+const computeScores = (
+  policyData: Record<string, Record<string, any>> | null
+) => {
+  if (!policyData) return null;
+  const seen = new Map<string, { identified: string; aligns: string; measurable: string }>();
+  for (const topic of Object.values(policyData)) {
+    for (const [measure, vals] of Object.entries(topic)) {
+      if (!seen.has(measure)) seen.set(measure, vals as any);
+    }
+  }
+  let presenceNum = 0;
+  const presenceDen = seen.size;
+  let qualityNum = 0;
+  let qualityDen = 0;
+  for (const [measure, vals] of seen.entries()) {
+    if (vals.identified === '✔') presenceNum++;
+    if (measure !== EXCLUDED_MEASURE) {
+      const aScore = ALIGN_SCORE[vals.aligns] ?? 0;
+      const mScore = MEASURABLE_SCORE[vals.measurable] ?? 0;
+      qualityNum += aScore * mScore;
+      qualityDen += 2;
+    }
+  }
+  return {
+    presence: { numerator: presenceNum, denominator: presenceDen },
+    quality: { numerator: qualityNum, denominator: qualityDen },
+  };
+};
+
+const pct = (n: number, d: number) =>
+  d === 0 ? '–' : `${((100 * n) / d).toFixed(1)}%`;
+
+const cellClass = (v: string) => {
+  if (v === '✔') return 'cell-tick';
+  if (v === '✘' || v === '✔/✘') return 'cell-cross';
+  return 'cell-dash';
+};
+
 export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDeleteReport, onProcessReport, reports, user }) => {
   const [selectedReport, setSelectedReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [settingsReport, setSettingsReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
@@ -244,61 +321,79 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
         </div>
 
         {/* Existing reports */}
-        {reports.filter(report => report !== null).map((report) => (
+        {reports.filter(report => report !== null).map((report) => {
+          const meta = parseReportMeta(report);
+          const policyData = parsePolicyData(report);
+          const scores = computeScores(policyData);
+          const titleLine = (meta.city && meta.country)
+            ? `${meta.city}, ${meta.country}`
+            : meta.city || meta.country || report.fileName;
+          return (
           <div
             key={report.id}
             onClick={() => openReport(report)}
             className="report-card"
           >
             <div className="report-thumbnail">
-              {report.status === 'COMPLETED' ? '📄 PDF' : report.status === 'FAILED' ? '⚠️' : '⏳'}
+              {/* Top bar: delete left, status right */}
+              <button
+                onClick={(e) => { e.stopPropagation(); onDeleteReport(report); }}
+                className="btn btn-danger delete-btn"
+                title="Delete report"
+              >×</button>
               <div className={`status-badge ${getStatusClass(report.status || 'PROCESSING')}`}>
                 {getStatusText(report.status || 'PROCESSING')}
               </div>
-              {report.status === 'FAILED' && report.errorMessage && (
-                <div className="error-indicator" title={report.errorMessage}>
-                  ⚠️ Error - Click for details
-                </div>
-              )}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteReport(report);
-                }}
-                className="btn btn-danger delete-btn"
-                title="Delete report"
-              >
-                ×
-              </button>
-              {/* Action buttons for reports */}
+
+              {/* Centre content */}
+              <div className="thumbnail-center">
+                {report.status === 'COMPLETED' && scores ? (
+                  <div className="report-scores">
+                    <div className="score-row">
+                      <span className="score-label">Presence</span>
+                      <span className="score-label">Quality</span>
+                    </div>
+                    <div className="score-row">
+                      <span className="score-pct">{pct(scores.presence.numerator, scores.presence.denominator)}</span>
+                      <span className="score-pct">{pct(scores.quality.numerator, scores.quality.denominator)}</span>
+                    </div>
+                    <div className="score-row">
+                      <span className="score-detail">{scores.presence.numerator}/{scores.presence.denominator}</span>
+                      <span className="score-detail">{scores.quality.numerator.toFixed(1)}/{scores.quality.denominator}</span>
+                    </div>
+                  </div>
+                ) : report.status === 'FAILED' ? (
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 32 }}>⚠️</div>
+                    {report.errorMessage && (
+                      <div className="error-indicator" title={report.errorMessage}>
+                        Click for details
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 32 }}>⏳</div>
+                )}
+              </div>
+
+              {/* Action buttons – centred at bottom */}
               {(report.status === 'UPLOADED' || report.status === 'FAILED' || report.status === 'COMPLETED') && (
-                <div className="action-buttons">
+                <div className="action-buttons-bar">
                   <button
                     onClick={async (e) => {
                       e.stopPropagation();
-                      // Fetch fresh report from database to ensure we have latest config
-                      const { data: freshReport } = await client.models.PolicyReport.get({
-                        id: report.id
-                      });
-                      console.log('Opening settings with fresh report:', freshReport?.reportConfig);
+                      const { data: freshReport } = await client.models.PolicyReport.get({ id: report.id });
                       setSettingsReport(freshReport || report);
                     }}
                     className="btn-icon"
                     title="Report settings"
-                  >
-                    ⚙️
-                  </button>
+                  >⚙️</button>
                   {report.status !== 'COMPLETED' ? (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onProcessReport(report);
-                      }}
+                      onClick={(e) => { e.stopPropagation(); onProcessReport(report); }}
                       className="btn-icon"
                       title="Process report"
-                    >
-                      ▶️
-                    </button>
+                    >▶️</button>
                   ) : (
                     <button
                       onClick={(e) => {
@@ -309,86 +404,155 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                       }}
                       className="btn-icon"
                       title="Regenerate report"
-                    >
-                      🔄
-                    </button>
+                    >🔄</button>
+                  )}
+                  {report.status === 'COMPLETED' && report.pdfUrl && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleViewPdf(report.pdfUrl!, report); }}
+                      className="btn-icon"
+                      title="View PDF"
+                    >📄</button>
                   )}
                 </div>
               )}
             </div>
-            <h4 className="report-title">{report.fileName}</h4>
-            <p className="report-date">
-              {report.uploadedAt ? new Date(report.uploadedAt).toLocaleDateString() : 'Processing...'}
-            </p>
-            {report.status === 'FAILED' && report.errorMessage && (
-              <p className="error-summary" title={report.errorMessage}>
-                {report.errorMessage.length > 60 
-                  ? report.errorMessage.substring(0, 60) + '...' 
-                  : report.errorMessage}
-              </p>
-            )}
+
+            {/* Card body */}
+            <div className="report-card-body">
+              <div className="report-card-city">{titleLine}</div>
+              {meta.reviewer && <div className="report-card-reviewer">{meta.reviewer}</div>}
+              {(meta.city || meta.country) && (
+                <div className="report-card-filename">{report.fileName}</div>
+              )}
+              <div className="report-card-date">
+                {report.uploadedAt ? new Date(report.uploadedAt).toLocaleDateString() : ''}
+              </div>
+              {report.status === 'FAILED' && report.errorMessage && (
+                <p className="error-summary" title={report.errorMessage}>
+                  {report.errorMessage.length > 60
+                    ? report.errorMessage.substring(0, 60) + '...'
+                    : report.errorMessage}
+                </p>
+              )}
+            </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
-      {selectedReport && (
-        <div className="modal-overlay">
-          <div className="modal-content">
+      {selectedReport && (() => {
+        const meta = parseReportMeta(selectedReport);
+        const policyData = parsePolicyData(selectedReport);
+        const scores = computeScores(policyData);
+        const titleLine = (meta.city && meta.country)
+          ? `${meta.city}, ${meta.country}`
+          : meta.city || meta.country || selectedReport.fileName;
+        return (
+        <div className="modal-overlay" onClick={() => setSelectedReport(null)}>
+          <div className="modal-content report-detail-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <button 
-                onClick={() => setSelectedReport(null)}
-                className="btn btn-close"
-              >
-                🗙
-              </button>
-              <h3>Report Status: {selectedReport.fileName}</h3>
+              <button onClick={() => setSelectedReport(null)} className="btn btn-close">🗙</button>
+              <h3 style={{ margin: 0 }}>{titleLine}</h3>
             </div>
-            
-            <div className="modal-row">
-              <strong>Status:</strong>
-              <span className={`status-text ${getStatusClass(selectedReport.status || 'PROCESSING')}`}>
-                {getStatusText(selectedReport.status || 'PROCESSING')}
-              </span>
+
+            {/* Info rows */}
+            <div className="report-detail-info">
+              {meta.reviewer && (
+                <div className="detail-row">
+                  <span className="detail-label">Reviewer</span>
+                  <span>{meta.reviewer}</span>
+                </div>
+              )}
+              {meta.year && (
+                <div className="detail-row">
+                  <span className="detail-label">Date of review</span>
+                  <span>{meta.year}</span>
+                </div>
+              )}
+              <div className="detail-row">
+                <span className="detail-label">Status</span>
+                <span className={`status-text ${getStatusClass(selectedReport.status || 'PROCESSING')}`}>
+                  {getStatusText(selectedReport.status || 'PROCESSING')}
+                </span>
+              </div>
+              {selectedReport.uploadedAt && (
+                <div className="detail-row">
+                  <span className="detail-label">Uploaded</span>
+                  <span>{new Date(selectedReport.uploadedAt).toLocaleString()}</span>
+                </div>
+              )}
+              {selectedReport.completedAt && (
+                <div className="detail-row">
+                  <span className="detail-label">Completed</span>
+                  <span>{new Date(selectedReport.completedAt).toLocaleString()}</span>
+                </div>
+              )}
+              {selectedReport.errorMessage && (
+                <div className="detail-row error-text">
+                  <span className="detail-label">Error</span>
+                  <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{selectedReport.errorMessage}</span>
+                </div>
+              )}
             </div>
-            
-            {selectedReport.uploadedAt && (
-              <div className="modal-row">
-                <strong>Uploaded:</strong> {new Date(selectedReport.uploadedAt).toLocaleString()}
-              </div>
-            )}
-            
-            {selectedReport.processedAt && (
-              <div className="modal-row">
-                <strong>Processing Started:</strong> {new Date(selectedReport.processedAt).toLocaleString()}
-              </div>
-            )}
-            
-            {selectedReport.completedAt && (
-              <div className="modal-row">
-                <strong>Completed:</strong> {new Date(selectedReport.completedAt).toLocaleString()}
-              </div>
-            )}
-            
-            {selectedReport.errorMessage && (
-              <div className="modal-row error-text">
-                <strong>Error:</strong> 
-                <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#f8d7da', borderRadius: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                  {selectedReport.errorMessage}
+
+            {/* Scores */}
+            {scores && (
+              <div className="modal-scores">
+                <div className="score-box">
+                  <div className="score-box-label">Presence</div>
+                  <div className="score-box-pct">{pct(scores.presence.numerator, scores.presence.denominator)}</div>
+                  <div className="score-box-detail">{scores.presence.numerator} of {scores.presence.denominator} measures identified</div>
+                </div>
+                <div className="score-box">
+                  <div className="score-box-label">Quality</div>
+                  <div className="score-box-pct">{pct(scores.quality.numerator, scores.quality.denominator)}</div>
+                  <div className="score-box-detail">Score: {scores.quality.numerator.toFixed(1)} / {scores.quality.denominator}</div>
                 </div>
               </div>
             )}
-            
+
+            {/* Checklist tables */}
+            {policyData && (
+              <div className="checklist-section">
+                {Object.entries(policyData).map(([indicator, measures]) => (
+                  <div key={indicator} className="checklist-indicator">
+                    <h4 className="checklist-indicator-title">{indicator}</h4>
+                    <table className="checklist-table">
+                      <thead>
+                        <tr>
+                          <th className="col-measure">Measure</th>
+                          <th className="col-score">Identified</th>
+                          <th className="col-score">Aligns</th>
+                          <th className="col-score">Measurable</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(measures).map(([measure, vals]: [string, any]) => (
+                          <tr key={measure}>
+                            <td className="col-measure">{measure}</td>
+                            <td className={`col-score ${cellClass(vals.identified)}`}>{vals.identified}</td>
+                            <td className={`col-score ${cellClass(vals.aligns)}`}>{vals.aligns}</td>
+                            <td className={`col-score ${cellClass(vals.measurable)}`}>{vals.measurable}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="modal-footer">
               {selectedReport.status === 'COMPLETED' && selectedReport.pdfUrl && (
                 <>
-                  <button 
+                  <button
                     onClick={() => handleViewPdf(selectedReport.pdfUrl!, selectedReport)}
                     className="btn btn-primary"
                     style={{ marginRight: '10px' }}
                   >
                     View PDF
                   </button>
-                  <button 
+                  <button
                     onClick={() => setPolicyDataReport(selectedReport)}
                     className="btn btn-secondary"
                     title="View Policy Data JSON"
@@ -396,7 +560,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                   >
                     JSON
                   </button>
-                  <button 
+                  <button
                     onClick={() => {
                       if (selectedReport.policyData) {
                         setPolicyChatReport(selectedReport);
@@ -415,7 +579,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {pdfViewerUrl && pdfReport && (
         <div className="modal-overlay" onClick={() => {
