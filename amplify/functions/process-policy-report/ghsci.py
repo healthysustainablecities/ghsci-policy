@@ -267,6 +267,8 @@ def generate_online_policy_report(
 ):
     """Generate a policy report for a completed policy checklist."""    
     policy_setting = get_policy_setting(checklist)
+    if policy_setting is None:
+        raise ValueError('Unable to read policy checklist "Collection details" worksheet; please ensure the file has been completed correctly.')
     if policy_setting['Checklist version'] is None:
         raise ValueError('Unable to determine version of policy checklist; please check the configured document is complete and includes the version number in cell A1 to proceed.')
     if 'language' not in options:
@@ -926,7 +928,7 @@ def get_policy_setting(xlsx) -> dict:
             ],
         )
         # Extract City context if available
-        city_context_rows = df.loc[df[location_details].str.strip().str.startswith('City context'), 'value'].dropna()
+        city_context_rows = df.loc[df[location_details].str.strip().str.startswith('City context').fillna(False), 'value'].dropna()
         if len(city_context_rows) > 0:
             setting['City context'] = city_context_rows.values[0]
             if pd.isna(setting['City context']):
@@ -935,7 +937,7 @@ def get_policy_setting(xlsx) -> dict:
             setting['City context'] = ''
         
         # Extract Demographics and health equity if available
-        demographics_rows = df.loc[df[location_details].str.strip().str.startswith('Demographics and health equity'), 'value'].dropna()
+        demographics_rows = df.loc[df[location_details].str.strip().str.startswith('Demographics and health equity').fillna(False), 'value'].dropna()
         if len(demographics_rows) > 0:
             setting['Demographics and health equity'] = demographics_rows.values[0]
             if pd.isna(setting['Demographics and health equity']):

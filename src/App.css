@@ -40,3 +40,10 @@
 .read-the-docs {
   color: #888;
 }
+
+blockquote {
+  border-left: 4px solid #ccc;
+  padding-left: 1em;
+  margin-left: 0;
+  color: #555;
+}

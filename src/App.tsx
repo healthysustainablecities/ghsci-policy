@@ -12,6 +12,7 @@ const client = generateClient<Schema>();
 function App() {
   const { user, signOut } = useAuthenticator();
   const [reports, setReports] = useState<Array<Schema["PolicyReport"]["type"]>>([]);
+  const [showAbout, setShowAbout] = useState(false);
   // Tracks IDs that the user has explicitly set back to PROCESSING (regeneration),
   // so the subscription protection doesn't block that intentional transition.
   const processingOverrideIds = useRef(new Set<string>());
@@ -248,14 +249,76 @@ function App() {
     <main className="main-container">
       <header className="header">
         <div>
-          <h1>Global Healthy and Sustainable Cities</h1>
-          <h2>Policy Report Generator</h2>
+          <h1>GHSCI Policy</h1>
+          <h2>Global Healthy and Sustainable City Indicators Policy analysis and reporting tool</h2 >
           <p>A tool to support analysis and reporting of policy indicators for the Global Observatory of Healthy and Sustainable Cities' <a href="https://www.healthysustainablecities.org/1000cities/" target="_blank" rel="noopener noreferrer">1000 Cities Challenge</a>.</p>
-          <p>This proof-of-concept application is under active development, and reporting may have limitations.</p>
+          <p>Developed out of RMIT University's Centre for Urban Research by <a href="https://cur.org.au/people/carl-higgs/" target="_blank" rel="noopener noreferrer">Dr Carl Higgs</a> and <a href="https://cur.org.au/people/melanie-lowe/" target="_blank" rel="noopener noreferrer">Dr Melanie Lowe</a> with the support of <a href="https://www.rmit.edu.au/partner/hubs/race" target="_blank" rel="noopener noreferrer">RMIT's Advanced Cloud Ecosystem Hub</a> and the <a href="https://www.healthysustainablecities.org/" target="_blank" rel="noopener noreferrer">Global Observatory of Healthy and Sustainable Cities</a>.
+          </p>
+          <p>To get started, visit the <a href="https://github.com/healthysustainablecities/global-indicators/wiki/1.-Policy-Indicators" target="_blank" rel="noopener noreferrer">GOHSC Policy Indicators</a> wiki and download the policy checklist Excel (.xlsx) audit tool.  Once the tool has been completed for city or region of interest, drop it in the app to get your city's score and generate a PDF report.</p>
+          <button className="about-link" onClick={() => setShowAbout(true)}>Find out more</button>
         </div>
         
         <SignOutIcon title={user?.signInDetails?.loginId || undefined}/>
       </header>
+
+      {showAbout && (
+        <div className="modal-overlay" onClick={() => setShowAbout(false)}>
+          <div className="modal-content about-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <button onClick={() => setShowAbout(false)} className="btn btn-close">🗙</button>
+              <h3 style={{ margin: 0 }}>About GHSCI-Policy</h3>
+            </div>
+            <div className="about-body">
+              <p>
+                The <strong>Global Healthy and Sustainable City Indicators (GHSCI) Policy</strong> analysis and reporting tool has been developed to support
+                stakeholders participating in the <a href="https://www.healthysustainablecities.org/1000cities/" target="_blank" rel="noopener noreferrer">1000 Cities Challenge</a> of
+                the <a href="https://www.healthysustainablecities.org/" target="_blank" rel="noopener noreferrer">Global Observatory of Healthy and Sustainable Cities (GOHSC)</a>.
+              </p>
+              <h4>Development team</h4>
+              <p>
+                <strong> Dr Carl Higgs</strong> — GOHSC Software Working Group co-lead; RMIT University, Centre for Urban Research
+                </p>
+                <p>
+                <strong>Dr Melanie Lowe</strong> — GOHSC Co-Director; RMIT University, Centre for Urban Research
+              </p>
+              <p>
+                We gratefully acknowledge the funding support for access to Amazon Web Services awarded through the <strong>RMIT Advanced Cloud Ecosystem (RACE) hub</strong> merit allocation scheme.
+              </p>
+              <p>
+                The tool will also provide opportunities for early feedback that will inform a tangential research project led by <strong>Dr Natalia Cadavid Aguilar</strong> and
+                <strong> Dr Eugen Resendiz-Bontrud</strong> at the Center for the Future of Cities,
+                Tecnológico de Monterrey, Mexico, exploring the potential for large language models to assist in policy review for diverse global contexts.  <a href="https://wun.ac.uk/wun/research/view/policybridge-policy-assessment-reporting-for-healthy-sustainable-cities/" target="blacnk" rel="noopener noreferrer">PolicyBridge</a> aims to help cities and researchers bridge the gap between data and action by providing a streamlined platform for assessing, comparing, and reporting on policies that drive urban health and sustainability.
+              </p>
+              <h4>About the GOHSC and 1000 Cities Challenge</h4>
+              <p>
+                The GOHSC is a leading global source of evidence-based, open-access urban policy and spatial
+                indicators, providing tools to measure and track progress towards healthy and sustainable cities.
+                The evidence-based indicators measure what matters — walkability, access to public space, food
+                stores and public transport, urban heat vulnerability, and the quality of policies that support
+                healthy and sustainable outcomes. By leveraging global open data and a rigorous, standardised
+                measurement approach, the GOHSC provides actionable neighbourhood-level insights and enables
+                comparable city measurement worldwide.
+              </p>
+              <p>
+                Through the 1000 Cities Challenge, the GOHSC aims to upscale its reach and support more cities
+                to measure and act on these indicators. Indicator reports — produced in English and local
+                languages — strengthen advocacy capabilities and equip policymakers with the information needed
+                to make evidence-informed decisions and track city planning outcomes.
+              </p>
+
+              <h4>Policy checklist</h4>
+              <p>
+                The policy review checklist was developed by <strong>Melanie Lowe</strong> and <strong>Deepti Adlakha</strong> as
+                part of the <a href="https://www.thelancet.com/series-do/urban-design-transport-and-health" target="_blank" rel="noopener noreferrer">Lancet Global Health Series on Urban Design, Transport and Health (2022)</a>.
+              </p>
+              <blockquote>
+                Boeing G, Higgs C, Liu S, Giles-Corti B, Sallis JF, Cerin E, Lowe M, Adlakha D, Hinckson E, Moudon AV, Salvo D, Adams MA, Barrozo LV, Bozovic T, Delclòs-Alió X, Dygrýn J, Ferguson S, Gebel K, Ho TP, Lai P-C, Martori JC, Nitvimol K, Queralt A, Roberts JD, Sambo GH, Schipperijn J, Vale D, Van de Weghe N, Vich G, Arundel J. Using open data and open-source software to develop spatial indicators of urban design and transport features for achieving healthy and sustainable cities. The Lancet Global Health. 2022 2022/06//;10(6):e907-e918. en. doi: <a href="https://doi.org/10.1016/S2214-109X(22)00072-9" target="_blank" rel="noopener noreferrer">https://doi.org/10.1016/S2214-109X(22)00072-9</a>.
+              </blockquote>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <ReportsList 
           onUploadComplete={handleUploadComplete}

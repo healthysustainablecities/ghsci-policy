@@ -10,7 +10,7 @@ import time
 import traceback
 from urllib.parse import unquote_plus
 from datetime import datetime
-from ghsci import generate_online_policy_report, get_policy_setting, policy_data_setup
+from ghsci import generate_online_policy_report, get_policy_setting, policy_data_setup, get_policy_presence_quality_score_dictionary
 
 s3_client = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
@@ -405,13 +405,15 @@ def update_report_config(file_key, report_config):
                 time.sleep(retry_delay)
                 retry_delay *= 2
 
-def update_policy_data(file_key, policy_data, max_retries=5):
+def update_policy_data(file_key, policy_data, scores=None, max_retries=5):
     """
     Update the policyData field in the database with policy_data_setup() results.
     
     Args:
         file_key: The S3 file key to identify the record
         policy_data: Dictionary from policy_data_setup() to be stored as JSON
+        scores: Optional dict from get_policy_presence_quality_score_dictionary(),
+                stored under '_scores' so the UI can use the authoritative values.
         max_retries: Maximum number of retry attempts
     """
     retry_delay = 1
@@ -423,6 +425,20 @@ def update_policy_data(file_key, policy_data, max_retries=5):
     for topic, df in policy_data.items():
         # df.to_json() returns a JSON string, parse it back to an object for proper nesting
         serializable_data[topic] = json.loads(df.to_json(orient="index"))
+    
+    # Embed authoritative presence/quality scores so the UI doesn't need to recompute them
+    if scores is not None:
+        # Cast numpy int64/float64 to native Python types so json.dumps can serialise them
+        serializable_data['_scores'] = {
+            'presence': {
+                'numerator': int(scores['presence']['numerator']),
+                'denominator': int(scores['presence']['denominator']),
+            },
+            'quality': {
+                'numerator': float(scores['quality']['numerator']),
+                'denominator': int(scores['quality']['denominator']),
+            },
+        }
     
     # Use ensure_ascii=False to preserve actual Unicode characters (✔, ✘) instead of escaping as \uXXXX
     # DynamoDB/AppSync handle UTF-8 properly, so the characters display correctly in the browser
@@ -552,8 +568,9 @@ def process_report(bucket, key, report_config=None):
     try:
         print("Extracting policy data using policy_data_setup()...")
         policy_data = policy_data_setup(checklist_file_path)
+        policy_scores = get_policy_presence_quality_score_dictionary(checklist_file_path)
         if policy_data:
-            update_policy_data(key, policy_data)
+            update_policy_data(key, policy_data, scores=policy_scores)
             print("Policy data extracted and saved successfully")
         else:
             print("Warning: policy_data_setup returned None")

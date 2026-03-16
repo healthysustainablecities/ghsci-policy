@@ -80,12 +80,30 @@ const ALIGN_SCORE: Record<string, number> = { '✔': 1, '✔/✘': -0.5, '✘': 
 const MEASURABLE_SCORE: Record<string, number> = { '✔': 2, '✘': 1, '-': 0 };
 
 const computeScores = (
-  policyData: Record<string, Record<string, any>> | null
+  policyData: Record<string, any> | null
 ) => {
   if (!policyData) return null;
+  // Prefer the authoritative scores saved by get_policy_presence_quality_score_dictionary()
+  // (stored under '_scores' by the Lambda).  These match the PDF report exactly.
+  if (policyData['_scores']) {
+    const s = policyData['_scores'] as {
+      presence: { numerator: number; denominator: number };
+      quality: { numerator: number; denominator: number };
+    };
+    if (
+      typeof s.presence?.numerator === 'number' &&
+      typeof s.presence?.denominator === 'number' &&
+      typeof s.quality?.numerator === 'number' &&
+      typeof s.quality?.denominator === 'number'
+    ) {
+      return s;
+    }
+  }
+  // Fallback: recompute from policyData for older records without _scores
   const seen = new Map<string, { identified: string; aligns: string; measurable: string }>();
-  for (const topic of Object.values(policyData)) {
-    for (const [measure, vals] of Object.entries(topic)) {
+  for (const [key, topic] of Object.entries(policyData)) {
+    if (key.startsWith('_')) continue;
+    for (const [measure, vals] of Object.entries(topic as Record<string, any>)) {
       if (!seen.has(measure)) seen.set(measure, vals as any);
     }
   }
@@ -514,7 +532,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             {/* Checklist tables */}
             {policyData && (
               <div className="checklist-section">
-                {Object.entries(policyData).map(([indicator, measures]) => (
+                {Object.entries(policyData).filter(([k]) => !k.startsWith('_')).map(([indicator, measures]) => (
                   <div key={indicator} className="checklist-indicator">
                     <h4 className="checklist-indicator-title">{indicator}</h4>
                     <table className="checklist-table">
