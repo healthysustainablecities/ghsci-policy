@@ -1567,22 +1567,32 @@ def _insert_report_image(
         # Fall back to S3 download for custom user-uploaded images
         bucket = config.get('bucket')
         if bucket:
-            # Try configuration/assets path in S3
-            s3_key = f'configuration/assets/{image_filename}'
             tmp_path = f'/tmp/{image_filename}'
-            try:
-                s3_client.download_file(bucket, s3_key, tmp_path)
-                image_path = tmp_path
-                print(f"Downloaded image from S3: {s3_key}")
-            except Exception as e:
-                # Try public path in S3
+            # Check if a full s3Key was stored for this image (custom user upload)
+            image_s3_key = config.get('reporting', {}).get('images', {}).get(str(number), {}).get('s3Key')
+            if image_s3_key:
                 try:
-                    s3_key = f'public/{image_filename}'
+                    s3_client.download_file(bucket, image_s3_key, tmp_path)
+                    image_path = tmp_path
+                    print(f"Downloaded custom image from S3: {image_s3_key}")
+                except Exception as e:
+                    print(f"Could not find image {image_filename} at s3Key {image_s3_key}: {e}")
+            else:
+                # Try configuration/assets path in S3 (shared/bundled assets)
+                s3_key = f'configuration/assets/{image_filename}'
+                try:
                     s3_client.download_file(bucket, s3_key, tmp_path)
                     image_path = tmp_path
                     print(f"Downloaded image from S3: {s3_key}")
-                except Exception as e2:
-                    print(f"Could not find image {image_filename}: {e2}")
+                except Exception as e:
+                    # Try public path in S3
+                    try:
+                        s3_key = f'public/{image_filename}'
+                        s3_client.download_file(bucket, s3_key, tmp_path)
+                        image_path = tmp_path
+                        print(f"Downloaded image from S3: {s3_key}")
+                    except Exception as e2:
+                        print(f"Could not find image {image_filename}: {e2}")
     
     if (
         image_path

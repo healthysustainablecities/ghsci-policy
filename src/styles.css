@@ -893,6 +893,24 @@ blockquote {
   border-bottom: 2px solid #6f42c1;
 }
 
+.checklist-indicator-toggle {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+}
+
+.checklist-indicator-toggle:hover {
+  color: #6f42c1;
+}
+
+.accordion-chevron {
+  font-size: 10px;
+  color: #6f42c1;
+  flex-shrink: 0;
+}
+
 .checklist-table {
   width: 100%;
   border-collapse: collapse;

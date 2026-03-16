@@ -120,9 +120,17 @@ def handler(event, context):
     print(f"Processing event: {json.dumps(event, indent=2)}")
 
     try:
-        # Extract bucket and key from the S3 event
-        bucket = event['Records'][0]['s3']['bucket']['name']
-        key = unquote_plus(event['Records'][0]['s3']['object']['key'])
+        # Support both direct S3 trigger format and EventBridge S3 event notification format
+        if 'Records' in event:
+            # Direct S3 trigger: event['Records'][0]['s3']['bucket']['name']
+            bucket = event['Records'][0]['s3']['bucket']['name']
+            key = unquote_plus(event['Records'][0]['s3']['object']['key'])
+        elif event.get('source') == 'aws.s3' and 'detail' in event:
+            # EventBridge S3 event notification format
+            bucket = event['detail']['bucket']['name']
+            key = unquote_plus(event['detail']['object']['key'])
+        else:
+            raise KeyError("Unrecognised event format: neither 'Records' nor EventBridge 'detail' found")
     except (KeyError, IndexError) as e:
         error_msg = f"Invalid S3 event format: {str(e)}"
         print(error_msg)

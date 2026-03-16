@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { uploadData } from 'aws-amplify/storage';
+import { uploadData, getUrl } from 'aws-amplify/storage';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../amplify/data/resource';
 
@@ -27,6 +27,7 @@ export interface ReportConfig {
         }>;
       };
     };
+    custom_blurb_fontsize?: number; // Optional custom font size for report blurb, e.g. 11 for 11px
   };
 }
 
@@ -79,13 +80,15 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
             }
           ]
         }
-      }
+      },
+      custom_blurb_fontsize: 12
     }
   });
 
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [bgImageUrl, setBgImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     // Load existing config from report if available
@@ -109,7 +112,8 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
           reporting: {
             doi: existingConfig?.reporting?.doi || '',
             images: existingConfig?.reporting?.images || config.reporting?.images || {},
-            languages: existingConfig?.reporting?.languages || config.reporting?.languages || {}
+            languages: existingConfig?.reporting?.languages || config.reporting?.languages || {},
+            custom_blurb_fontsize: existingConfig?.reporting?.custom_blurb_fontsize || 12
           }
         };
         
@@ -120,17 +124,34 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
     }
   }, [report.id]);
 
+  useEffect(() => {
+    const s3Key = config.reporting?.images?.['1']?.s3Key;
+    if (!s3Key) {
+      setBgImageUrl(null);
+      return;
+    }
+    getUrl({ path: s3Key })
+      .then(({ url }) => setBgImageUrl(url.toString()))
+      .catch(() => setBgImageUrl(null));
+  }, [config.reporting?.images?.['1']?.s3Key]);
+
   const handleImageUpload = async (imageNumber: string, file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('Please upload an image file');
       return;
     }
 
+    // Skip upload if the same file is already stored for this image slot
+    const existing = config.reporting?.images?.[imageNumber];
+    if (existing?.s3Key && existing?.file === file.name) {
+      return;
+    }
+
     setUploadingImage(imageNumber);
     try {
       const username = sanitizeUserId(user?.username || 'unknown');
-      const timestamp = Date.now();
-      const key = `${username}/images/${timestamp}-${file.name}`;
+      // Use filename-based key (no timestamp) so re-uploading the same file reuses the same S3 object
+      const key = `${username}/images/${file.name}`;
       
       await uploadData({
         path: `public/${key}`,
@@ -259,6 +280,9 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
             </div>
           );
         })}
+        <div className="summary-item">
+          <strong>Blurb font size:</strong> {config.reporting?.custom_blurb_fontsize ?? 12}pt
+        </div>
       </div>
     );
   };
@@ -319,6 +343,18 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
               </label>
             );
           })}
+          
+          <label className="settings-field">
+            <span>Custom blurb font size:</span>
+            <input
+              type="number"
+              min={6}
+              max={20}
+              step={0.5}
+              value={config.reporting?.custom_blurb_fontsize ?? 12}
+              onChange={(e) => updateConfig(['reporting', 'custom_blurb_fontsize'], parseFloat(e.target.value) || 12)}
+            />
+          </label>
 
           <p className="settings-help" style={{ marginTop: '20px' }}>Images 1-2: 2100px × 1000px (21:10 ratio), Images 3-4: 1000px × 1000px (1:1 ratio)</p>
           {['1', '2', '3', '4'].map(num => (
@@ -351,8 +387,8 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content settings-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-content settings-modal">
         <div className="modal-header">
           <button onClick={onClose} className="btn btn-close">🗙</button>
           <h3>Report Settings: {report.fileName}</h3>

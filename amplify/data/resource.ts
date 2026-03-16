@@ -1,4 +1,5 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
+import { triggerProcessing } from '../functions/trigger-processing/resource';
 
 /*== STEP 1 ===============================================================
 The section below creates a Todo database table with a "content" field. Try
@@ -38,7 +39,7 @@ const schema = a.schema({
     })
     .returns(a.json())
     .authorization((allow) => [allow.authenticated()])
-    .handler(a.handler.function('triggerProcessing')),
+    .handler(a.handler.function(triggerProcessing)),
 
   // AI Conversation for policy analysis
   policyChat: a.conversation({

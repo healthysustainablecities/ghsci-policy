@@ -4,11 +4,10 @@ import { data } from './data/resource';
 import { storage } from './storage/resource';
 import { triggerProcessing } from './functions/trigger-processing/resource';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
-import { EventType } from 'aws-cdk-lib/aws-s3';
-import * as aws_s3_notifications from 'aws-cdk-lib/aws-s3-notifications';
 import { Function, Runtime, Code } from 'aws-cdk-lib/aws-lambda';
 import { Duration } from 'aws-cdk-lib';
-import { Bucket } from 'aws-cdk-lib/aws-s3';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 
 const backend = defineBackend({
   auth,
@@ -17,11 +16,11 @@ const backend = defineBackend({
   triggerProcessing,
 });
 
-// Get storage stack to add Lambda there
-const storageStack = backend.storage.resources.bucket.stack;
+// Place Python Lambda in data stack so all data-related resources are co-located,
+// avoiding a circular dependency between storage and data stacks.
+const dataStack = backend.data.stack;
 
-// Create Python Lambda in storage stack to avoid circular dependency
-const processReportFunctionHandler = new Function(storageStack, 'ProcessPolicyReport', {
+const processReportFunctionHandler = new Function(dataStack, 'ProcessPolicyReport', {
   runtime: Runtime.PYTHON_3_13,
   handler: 'handler.handler',
   code: Code.fromAsset('amplify/functions/process-policy-report'),
@@ -80,12 +79,22 @@ backend.triggerProcessing.resources.lambda.addToRolePolicy(
   })
 );
 
-// Set up S3 event notification - auto-trigger processing and parsing on upload
-s3Bucket.addEventNotification(
-  EventType.OBJECT_CREATED,
-  new aws_s3_notifications.LambdaDestination(processReportFunctionHandler),
-  { suffix: '.xlsx' }
-);
+// Enable EventBridge notifications on the S3 bucket (no Lambda ARN in storage stack,
+// which avoids a circular stack dependency). The rule targeting the Lambda lives in
+// the data stack which already depends on storage.
+s3Bucket.enableEventBridgeNotification();
+
+const xlsxUploadRule = new events.Rule(dataStack, 'XlsxUploadRule', {
+  eventPattern: {
+    source: ['aws.s3'],
+    detailType: ['Object Created'],
+    detail: {
+      bucket: { name: [s3Bucket.bucketName] },
+      object: { key: [{ suffix: '.xlsx' }] },
+    },
+  },
+});
+xlsxUploadRule.addTarget(new targets.LambdaFunction(processReportFunctionHandler));
 
 // Output Lambda function name for easy CloudWatch debugging
 backend.addOutput({

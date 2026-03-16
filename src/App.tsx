@@ -158,7 +158,30 @@ function App() {
           console.error('Failed to delete PDF file:', err);
         }
       }
-      
+
+      // Delete uploaded images from S3
+      try {
+        let reportConfig = report.reportConfig;
+        while (typeof reportConfig === 'string') {
+          try { reportConfig = JSON.parse(reportConfig); } catch { break; }
+        }
+        const images = (reportConfig as any)?.reporting?.images;
+        if (images && typeof images === 'object') {
+          for (const img of Object.values(images) as any[]) {
+            if (img?.s3Key) {
+              try {
+                await remove({ path: img.s3Key });
+                console.log('Deleted image:', img.s3Key);
+              } catch (err) {
+                console.error('Failed to delete image:', img.s3Key, err);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to parse reportConfig for image cleanup:', err);
+      }
+
       // Delete from database
       const { data, errors } = await client.models.PolicyReport.delete({ id: report.id });
       
@@ -221,7 +244,13 @@ function App() {
       console.log('Processing triggered:', result);
       
       // Check if trigger was successful
-      const triggerResult = result?.data as { success?: boolean; message?: string } | null;
+      // result.data may be a JSON string (AppSync returns .json() as string for custom mutations)
+      let triggerResult: { success?: boolean; message?: string } | null = null;
+      if (typeof result?.data === 'string') {
+        try { triggerResult = JSON.parse(result.data); } catch { triggerResult = null; }
+      } else {
+        triggerResult = result?.data as { success?: boolean; message?: string } | null;
+      }
       if (!triggerResult?.success) {
         throw new Error(triggerResult?.message || 'Failed to trigger processing');
       }
@@ -233,11 +262,12 @@ function App() {
       console.error('Failed to start processing:', error);
       alert('Failed to start processing. Please try again.');
       
-      // Revert status on error
+      // Revert status on error and record the error message
       try {
         await client.models.PolicyReport.update({
           id: report.id,
-          status: isRegeneration ? 'COMPLETED' : 'UPLOADED',
+          status: isRegeneration ? 'FAILED' : 'UPLOADED',
+          errorMessage: error instanceof Error ? error.message : String(error),
         });
       } catch (revertError) {
         console.error('Failed to revert status:', revertError);

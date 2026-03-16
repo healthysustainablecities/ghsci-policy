@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
 import { uploadData } from 'aws-amplify/storage';
@@ -75,6 +75,19 @@ const parseReportMeta = (
   }
 };
 
+const extractImageS3Key = (
+  report: Schema["PolicyReport"]["type"]
+): string | null => {
+  if (!report.reportConfig) return null;
+  try {
+    let cfg: any = report.reportConfig;
+    while (typeof cfg === 'string') cfg = JSON.parse(cfg);
+    return cfg?.reporting?.images?.['1']?.s3Key || null;
+  } catch {
+    return null;
+  }
+};
+
 const EXCLUDED_MEASURE = 'Transport and planning combined in one government department';
 const ALIGN_SCORE: Record<string, number> = { '✔': 1, '✔/✘': -0.5, '✘': -1 };
 const MEASURABLE_SCORE: Record<string, number> = { '✔': 2, '✘': 1, '-': 0 };
@@ -144,11 +157,20 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
   const [isUploading, setIsUploading] = useState(false);
   const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
   const [pdfReport, setPdfReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
+  const [expandedIndicator, setExpandedIndicator] = useState<string | null>(null);
+  const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
+  const fetchedS3KeysRef = useRef<Set<string>>(new Set());
   const client = generateClient<Schema>();
 
   useEffect(() => {
     // No longer needed - reports come from props
   }, []);
+
+  useEffect(() => {
+    if (selectedReport) {
+      setExpandedIndicator(null);
+    }
+  }, [selectedReport?.id]);
 
   // Clean up object URL when modal closes
   useEffect(() => {
@@ -158,6 +180,28 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
       }
     };
   }, [pdfViewerUrl]);
+
+  // Fetch signed URLs for custom uploaded images (keyed by s3Key so updates are picked up)
+  useEffect(() => {
+    const fetchImageUrls = async () => {
+      const updates: Record<string, string> = {};
+      for (const report of reports.filter(r => r !== null)) {
+        const s3Key = extractImageS3Key(report);
+        if (!s3Key || fetchedS3KeysRef.current.has(s3Key)) continue;
+        fetchedS3KeysRef.current.add(s3Key);
+        try {
+          const { url } = await getUrl({ path: s3Key });
+          updates[s3Key] = url.toString();
+        } catch {
+          // image not accessible, skip
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        setImageUrlMap(prev => ({ ...prev, ...updates }));
+      }
+    };
+    fetchImageUrls();
+  }, [reports]);
 
   const handleFiles = async (files: File[]) => {
     const xlsxFiles = files.filter(f => f.name.endsWith('.xlsx'));
@@ -346,13 +390,22 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
           const titleLine = (meta.city && meta.country)
             ? `${meta.city}, ${meta.country}`
             : meta.city || meta.country || report.fileName;
+          const cardS3Key = extractImageS3Key(report);
+          const bgUrl = cardS3Key ? imageUrlMap[cardS3Key] : undefined;
           return (
           <div
             key={report.id}
             onClick={() => openReport(report)}
             className="report-card"
           >
-            <div className="report-thumbnail">
+            <div
+              className="report-thumbnail"
+              style={bgUrl ? {
+                backgroundImage: `linear-gradient(rgba(255,255,255,0.6), rgba(255,255,255,0.9)), url("${bgUrl}")`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              } : undefined}
+            >
               {/* Top bar: delete left, status right */}
               <button
                 onClick={(e) => { e.stopPropagation(); onDeleteReport(report); }}
@@ -368,8 +421,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                 {report.status === 'COMPLETED' && scores ? (
                   <div className="report-scores">
                     <div className="score-row">
-                      <span className="score-label">Presence</span>
-                      <span className="score-label">Quality</span>
+                      <span className="score-label">Policy presence</span>
+                      <span className="score-label">Policy quality</span>
                     </div>
                     <div className="score-row">
                       <span className="score-pct">{pct(scores.presence.numerator, scores.presence.denominator)}</span>
@@ -466,8 +519,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
           ? `${meta.city}, ${meta.country}`
           : meta.city || meta.country || selectedReport.fileName;
         return (
-        <div className="modal-overlay" onClick={() => setSelectedReport(null)}>
-          <div className="modal-content report-detail-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-content report-detail-modal">
             <div className="modal-header">
               <button onClick={() => setSelectedReport(null)} className="btn btn-close">🗙</button>
               <h3 style={{ margin: 0 }}>{titleLine}</h3>
@@ -517,12 +570,12 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             {scores && (
               <div className="modal-scores">
                 <div className="score-box">
-                  <div className="score-box-label">Presence</div>
+                  <div className="score-box-label">Policy presence</div>
                   <div className="score-box-pct">{pct(scores.presence.numerator, scores.presence.denominator)}</div>
                   <div className="score-box-detail">{scores.presence.numerator} of {scores.presence.denominator} measures identified</div>
                 </div>
                 <div className="score-box">
-                  <div className="score-box-label">Quality</div>
+                  <div className="score-box-label">Policy quality</div>
                   <div className="score-box-pct">{pct(scores.quality.numerator, scores.quality.denominator)}</div>
                   <div className="score-box-detail">Score: {scores.quality.numerator.toFixed(1)} / {scores.quality.denominator}</div>
                 </div>
@@ -532,31 +585,42 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             {/* Checklist tables */}
             {policyData && (
               <div className="checklist-section">
-                {Object.entries(policyData).filter(([k]) => !k.startsWith('_')).map(([indicator, measures]) => (
-                  <div key={indicator} className="checklist-indicator">
-                    <h4 className="checklist-indicator-title">{indicator}</h4>
-                    <table className="checklist-table">
-                      <thead>
-                        <tr>
-                          <th className="col-measure">Measure</th>
-                          <th className="col-score">Identified</th>
-                          <th className="col-score">Aligns</th>
-                          <th className="col-score">Measurable</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Object.entries(measures).map(([measure, vals]: [string, any]) => (
-                          <tr key={measure}>
-                            <td className="col-measure">{measure}</td>
-                            <td className={`col-score ${cellClass(vals.identified)}`}>{vals.identified}</td>
-                            <td className={`col-score ${cellClass(vals.aligns)}`}>{vals.aligns}</td>
-                            <td className={`col-score ${cellClass(vals.measurable)}`}>{vals.measurable}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ))}
+                {Object.entries(policyData).filter(([k]) => !k.startsWith('_')).map(([indicator, measures]) => {
+                  const isOpen = expandedIndicator === indicator;
+                  return (
+                    <div key={indicator} className="checklist-indicator">
+                      <h4
+                        className={`checklist-indicator-title checklist-indicator-toggle${isOpen ? ' is-open' : ''}`}
+                        onClick={() => setExpandedIndicator(isOpen ? null : indicator)}
+                      >
+                        {indicator}
+                        <span className="accordion-chevron">{isOpen ? '▲' : '▼'}</span>
+                      </h4>
+                      {isOpen && (
+                        <table className="checklist-table">
+                          <thead>
+                            <tr>
+                              <th className="col-measure">Measure</th>
+                              <th className="col-score">Identified</th>
+                              <th className="col-score">Aligns</th>
+                              <th className="col-score">Measurable</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(measures).map(([measure, vals]: [string, any]) => (
+                              <tr key={measure}>
+                                <td className="col-measure">{measure}</td>
+                                <td className={`col-score ${cellClass(vals.identified)}`}>{vals.identified}</td>
+                                <td className={`col-score ${cellClass(vals.aligns)}`}>{vals.aligns}</td>
+                                <td className={`col-score ${cellClass(vals.measurable)}`}>{vals.measurable}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -601,12 +665,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
       })()}
 
       {pdfViewerUrl && pdfReport && (
-        <div className="modal-overlay" onClick={() => {
-          URL.revokeObjectURL(pdfViewerUrl);
-          setPdfViewerUrl(null);
-          setPdfReport(null);
-        }}>
-          <div className="modal-content pdf-viewer-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-content pdf-viewer-modal">
             <div className="modal-header">
               <button 
                 onClick={() => {
@@ -646,8 +706,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
       )}
 
       {policyDataReport && (
-        <div className="modal-overlay" onClick={() => setPolicyDataReport(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '90%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '90%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div className="modal-header">
               <button 
                 onClick={() => setPolicyDataReport(null)}
