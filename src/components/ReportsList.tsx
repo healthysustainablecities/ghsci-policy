@@ -64,44 +64,52 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
     };
   }, [pdfViewerUrl]);
 
-  const handleFile = async (file: File) => {
-    if (!file.name.endsWith('.xlsx')) {
-      alert('Please upload an Excel (.xlsx) file');
-      return;
+  const handleFiles = async (files: File[]) => {
+    const xlsxFiles = files.filter(f => f.name.endsWith('.xlsx'));
+    const rejected = files.filter(f => !f.name.endsWith('.xlsx'));
+
+    if (rejected.length > 0) {
+      alert(`Skipped ${rejected.length} non-xlsx file(s): ${rejected.map(f => f.name).join(', ')}`);
     }
 
-    if (file.size >= 1024 * 1024) {
-      alert('File size must be less than 1MB');
-      return;
-    }
-
-    // Check for duplicate filename (filter out null records from deserialization errors)
-    const existingReport = reports.filter(r => r !== null).find(r => r.fileName === file.name);
-    if (existingReport) {
-      alert(`File "${file.name}" already exists. Please delete the existing report before uploading again.`);
-      return;
-    }
+    if (xlsxFiles.length === 0) return;
 
     setIsUploading(true);
     try {
-      // Generate S3 key using sanitized username for organization
-      // Format: public/{sanitized-username}/{filename}
-      const username = sanitizeUserId(user?.username || 'unknown');
-      const key = `${username}/${file.name}`;
-      
-      await uploadData({
-        path: `public/${key}`,
-        data: file,
-        options: {
-          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      for (const file of xlsxFiles) {
+        if (file.size >= 1024 * 1024) {
+          alert(`"${file.name}" exceeds 1MB and was skipped.`);
+          continue;
         }
-      });
-      
-      // Trigger processing after successful upload (fileName is original, fileKey is user-specific)
-      onUploadComplete(file.name, file.size, `public/${key}`);
-    } catch (error) {
-      console.error('Upload failed:', error);
-      alert('Upload failed. Please try again.');
+
+        // Check for duplicate filename (filter out null records from deserialization errors)
+        const existingReport = reports.filter(r => r !== null).find(r => r.fileName === file.name);
+        if (existingReport) {
+          alert(`"${file.name}" already exists. Please delete the existing report before uploading again.`);
+          continue;
+        }
+
+        try {
+          // Generate S3 key using sanitized username for organization
+          // Format: public/{sanitized-username}/{filename}
+          const username = sanitizeUserId(user?.username || 'unknown');
+          const key = `${username}/${file.name}`;
+
+          await uploadData({
+            path: `public/${key}`,
+            data: file,
+            options: {
+              contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            }
+          });
+
+          // Trigger processing after successful upload (fileName is original, fileKey is user-specific)
+          onUploadComplete(file.name, file.size, `public/${key}`);
+        } catch (error) {
+          console.error('Upload failed:', error);
+          alert(`Upload failed for "${file.name}". Please try again.`);
+        }
+      }
     } finally {
       setIsUploading(false);
     }
@@ -112,15 +120,17 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      handleFile(files[0]);
+      handleFiles(files);
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      handleFile(files[0]);
+      handleFiles(Array.from(files));
     }
+    // Reset input so the same file can be re-selected after deletion
+    e.target.value = '';
   };
 
   const openReport = async (report: Schema["PolicyReport"]["type"]) => {
@@ -220,12 +230,13 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             {isUploading ? (
               <div>⏳<br/>Uploading...</div>
             ) : (
-              <div>📁<br/>Upload 1000 Cities Challenge policy checklist xlsx file</div>
+              <div>📁<br/>Upload 1000 Cities Challenge policy checklist xlsx file(s)</div>
             )}
           </div>
           <input
             type="file"
             accept=".xlsx"
+            multiple
             onChange={handleFileSelect}
             style={{ display: 'none' }}
             id="file-input-grid"

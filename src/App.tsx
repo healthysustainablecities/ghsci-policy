@@ -1,5 +1,5 @@
 import { useAuthenticator, Icon } from '@aws-amplify/ui-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { generateClient } from 'aws-amplify/data';
 import { remove } from 'aws-amplify/storage';
 import type { Schema } from '../amplify/data/resource';
@@ -12,6 +12,9 @@ const client = generateClient<Schema>();
 function App() {
   const { user, signOut } = useAuthenticator();
   const [reports, setReports] = useState<Array<Schema["PolicyReport"]["type"]>>([]);
+  // Tracks IDs that the user has explicitly set back to PROCESSING (regeneration),
+  // so the subscription protection doesn't block that intentional transition.
+  const processingOverrideIds = useRef(new Set<string>());
 
 
 
@@ -40,9 +43,29 @@ function App() {
         items.forEach(item => {
           console.log('  - Item:', item?.fileName, 'Status:', item?.status);
         });
-        setReports([...items].sort((a, b) => 
-          new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
-        ));
+        setReports(prevReports => {
+          const prevMap = new Map(prevReports.map(r => [r.id, r]));
+          // Deduplicate incoming items by id (last occurrence wins)
+          const deduped = Array.from(new Map(items.map(item => [item.id, item])).values());
+          const merged = deduped.map(item => {
+            const prev = prevMap.get(item.id);
+            const prevIsTerminal = prev?.status === 'COMPLETED' || prev?.status === 'FAILED';
+            const incomingIsDowngrade = !item.status || item.status === 'PROCESSING' || item.status === 'UPLOADED';
+            // Block the subscription from downgrading a terminal status unless the user
+            // explicitly triggered reprocessing for this specific report.
+            if (prevIsTerminal && incomingIsDowngrade && !processingOverrideIds.current.has(item.id)) {
+              return { ...item, status: prev!.status };
+            }
+            // Once the subscription confirms the PROCESSING state we allowed, clear the override.
+            if (item.status === 'PROCESSING' && processingOverrideIds.current.has(item.id)) {
+              processingOverrideIds.current.delete(item.id);
+            }
+            return item;
+          });
+          return [...merged].sort((a, b) =>
+            new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
+          );
+        });
       },
       error: (error) => {
         console.error('Subscription error:', error);
@@ -75,7 +98,9 @@ function App() {
   const fetchReports = async () => {
     try {
       const { data } = await client.models.PolicyReport.list();
-      setReports([...data].sort((a, b) => 
+      // Deduplicate by id before setting state
+      const deduped = Array.from(new Map(data.map(item => [item.id, item])).values());
+      setReports([...deduped].sort((a, b) =>
         new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
       ));
     } catch (error) {
@@ -170,7 +195,10 @@ function App() {
       if (report.errorMessage) {
         updateData.errorMessage = null;
       }
-      
+
+      // Allow the subscription to accept the PROCESSING transition for this report,
+      // even if its current local status is a terminal state (COMPLETED/FAILED).
+      processingOverrideIds.current.add(report.id);
       await client.models.PolicyReport.update(updateData);
 
       // Get the bucket name from amplify outputs
