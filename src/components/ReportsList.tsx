@@ -159,6 +159,9 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
   const [pdfReport, setPdfReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [expandedIndicator, setExpandedIndicator] = useState<string | null>(null);
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
+  const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
+  const [sortBy, setSortBy] = useState<'uploadDate' | 'completedDate' | 'cityCountry' | 'countryCity' | 'author'>('uploadDate');
+  const [showStatusInfo, setShowStatusInfo] = useState(false);
   const fetchedS3KeysRef = useRef<Set<string>>(new Set());
   const client = generateClient<Schema>();
 
@@ -353,8 +356,202 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
     URL.revokeObjectURL(url);
   };
 
+  const formatDateYYYYMMDD = (dateString: string | undefined | null): string => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const handleToggleSelect = (reportId: string) => {
+    setSelectedReportIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(reportId)) {
+        newSet.delete(reportId);
+      } else {
+        newSet.add(reportId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    const validReports = reports.filter(r => r !== null);
+    const allIds = new Set(validReports.map(r => r.id));
+    setSelectedReportIds(allIds);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedReportIds(new Set());
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedReportIds.size === 0) {
+      alert('No reports selected');
+      return;
+    }
+    
+    const count = selectedReportIds.size;
+    if (!confirm(`Delete ${count} selected report(s)?`)) {
+      return;
+    }
+
+    // Delete each selected report
+    const reportsToDelete = reports.filter(r => r !== null && selectedReportIds.has(r.id));
+    reportsToDelete.forEach(report => onDeleteReport(report));
+    
+    // Clear selection
+    setSelectedReportIds(new Set());
+  };
+
+  const handleDownloadSelected = async () => {
+    if (selectedReportIds.size === 0) {
+      alert('No reports selected');
+      return;
+    }
+
+    const reportsToDownload = reports.filter(r => r !== null && selectedReportIds.has(r.id));
+    
+    // Download PDFs for completed reports
+    for (const report of reportsToDownload) {
+      if (report.status === 'COMPLETED' && report.pdfUrl) {
+        try {
+          const signedUrl = await getUrl({ path: report.pdfUrl });
+          const response = await fetch(signedUrl.url.toString());
+          const blob = await response.blob();
+          
+          // Create download link
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          const meta = parseReportMeta(report);
+          const fileName = meta.city && meta.country 
+            ? `${meta.city}_${meta.country}_policy_report.pdf`
+            : report.fileName.replace('.xlsx', '_policy_report.pdf');
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          
+          // Small delay between downloads to avoid browser blocking
+          await new Promise(resolve => setTimeout(resolve, 300));
+        } catch (error) {
+          console.error(`Failed to download PDF for ${report.fileName}:`, error);
+        }
+      }
+    }
+  };
+
+  const getSortedReports = () => {
+    const validReports = reports.filter(report => report !== null);
+    
+    return [...validReports].sort((a, b) => {
+      const metaA = parseReportMeta(a);
+      const metaB = parseReportMeta(b);
+      
+      switch (sortBy) {
+        case 'cityCountry': {
+          const cityA = metaA.city || '';
+          const cityB = metaB.city || '';
+          const countryA = metaA.country || '';
+          const countryB = metaB.country || '';
+          const compareCity = cityA.localeCompare(cityB);
+          return compareCity !== 0 ? compareCity : countryA.localeCompare(countryB);
+        }
+        case 'countryCity': {
+          const cityA = metaA.city || '';
+          const cityB = metaB.city || '';
+          const countryA = metaA.country || '';
+          const countryB = metaB.country || '';
+          const compareCountry = countryA.localeCompare(countryB);
+          return compareCountry !== 0 ? compareCountry : cityA.localeCompare(cityB);
+        }
+        case 'author': {
+          const authorA = metaA.reviewer || '';
+          const authorB = metaB.reviewer || '';
+          return authorA.localeCompare(authorB);
+        }
+        case 'completedDate': {
+          const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+          const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+          return dateB - dateA; // Most recent first
+        }
+        case 'uploadDate':
+        default: {
+          const dateA = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
+          const dateB = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
+          return dateB - dateA; // Most recent first
+        }
+      }
+    });
+  };
+
+  const sortedReports = getSortedReports();
+
   return (
     <>
+      {/* Toolbar above the grid */}
+      <div className="reports-toolbar">
+        <div className="toolbar-left">
+        </div>
+        <div className="toolbar-right">
+          {selectedReportIds.size > 0 ? (
+            <div className="selection-controls">
+              <span className="selection-text">Selection ({selectedReportIds.size}):</span>
+              <button 
+                onClick={handleDeleteSelected}
+                className="btn-link btn-link-danger"
+                title={`Delete ${selectedReportIds.size} selected report(s)`}
+              >
+                Delete
+              </button>
+              <button 
+                onClick={handleDownloadSelected}
+                className="btn-link btn-link-primary"
+                title={`Download ${selectedReportIds.size} selected report(s)`}
+              >
+                Download
+              </button>
+              <button 
+                onClick={handleClearSelection}
+                className="btn-link btn-link-secondary"
+                title="Clear selection"
+              >
+                Clear
+              </button>
+            </div>
+          ) : (
+            <div className="selection-controls">
+              <button 
+                onClick={handleSelectAll}
+                className="btn-link btn-link-primary"
+                title="Select all reports"
+              >
+                Select all
+              </button>
+            </div>
+          )}
+          <label className="sort-label">
+            Sort by:
+            <select 
+              value={sortBy} 
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="sort-select"
+            >
+              <option value="uploadDate">Upload date</option>
+              <option value="completedDate">Completed date</option>
+              <option value="cityCountry">City, Country</option>
+              <option value="countryCity">Country, City</option>
+              <option value="author">Author</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
       <div className="reports-grid">
         {/* Upload area as first item */}
         <div
@@ -383,7 +580,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
         </div>
 
         {/* Existing reports */}
-        {reports.filter(report => report !== null).map((report) => {
+        {sortedReports.map((report) => {
           const meta = parseReportMeta(report);
           const policyData = parsePolicyData(report);
           const scores = computeScores(policyData);
@@ -392,30 +589,47 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             : meta.city || meta.country || report.fileName;
           const cardS3Key = extractImageS3Key(report);
           const bgUrl = cardS3Key ? imageUrlMap[cardS3Key] : undefined;
+          const isSelected = selectedReportIds.has(report.id);
           return (
           <div
             key={report.id}
-            onClick={() => openReport(report)}
-            className="report-card"
+            className={`report-card ${isSelected ? 'report-card-selected' : ''}`}
           >
+            {/* Header with checkbox and status */}
+            <div className="report-card-header">
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  handleToggleSelect(report.id);
+                }}
+                className="report-checkbox"
+                title="Select for deletion"
+              />
+              <div 
+                className={`status-badge ${getStatusClass(report.status || 'PROCESSING')}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowStatusInfo(true);
+                }}
+                style={{ cursor: 'pointer' }}
+                title="Click for status info"
+              >
+                {getStatusText(report.status || 'PROCESSING')}
+              </div>
+            </div>
+
+            {/* Clickable thumbnail/scorecard */}
             <div
               className="report-thumbnail"
+              onClick={() => openReport(report)}
               style={bgUrl ? {
                 backgroundImage: `linear-gradient(rgba(255,255,255,0.6), rgba(255,255,255,0.9)), url("${bgUrl}")`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
               } : undefined}
             >
-              {/* Top bar: delete left, status right */}
-              <button
-                onClick={(e) => { e.stopPropagation(); onDeleteReport(report); }}
-                className="btn btn-danger delete-btn"
-                title="Delete report"
-              >×</button>
-              <div className={`status-badge ${getStatusClass(report.status || 'PROCESSING')}`}>
-                {getStatusText(report.status || 'PROCESSING')}
-              </div>
-
               {/* Centre content */}
               <div className="thumbnail-center">
                 {report.status === 'COMPLETED' && scores ? (
@@ -496,7 +710,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                 <div className="report-card-filename">{report.fileName}</div>
               )}
               <div className="report-card-date">
-                {report.uploadedAt ? new Date(report.uploadedAt).toLocaleDateString() : ''}
+                {formatDateYYYYMMDD(report.uploadedAt)}
               </div>
               {report.status === 'FAILED' && report.errorMessage && (
                 <p className="error-summary" title={report.errorMessage}>
@@ -549,13 +763,13 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
               {selectedReport.uploadedAt && (
                 <div className="detail-row">
                   <span className="detail-label">Uploaded</span>
-                  <span>{new Date(selectedReport.uploadedAt).toLocaleString()}</span>
+                  <span>{formatDateYYYYMMDD(selectedReport.uploadedAt)}</span>
                 </div>
               )}
               {selectedReport.completedAt && (
                 <div className="detail-row">
                   <span className="detail-label">Completed</span>
-                  <span>{new Date(selectedReport.completedAt).toLocaleString()}</span>
+                  <span>{formatDateYYYYMMDD(selectedReport.completedAt)}</span>
                 </div>
               )}
               {selectedReport.errorMessage && (
@@ -835,6 +1049,44 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
           report={policyChatReport}
           onClose={() => setPolicyChatReport(null)}
         />
+      )}
+
+      {/* Status Info Modal */}
+      {showStatusInfo && (
+        <div className="modal-overlay" onClick={() => setShowStatusInfo(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <button onClick={() => setShowStatusInfo(false)} className="btn btn-close">🗙</button>
+              <h3>Report Status Guide</h3>
+            </div>
+            <div className="status-info-content">
+              <div className="status-info-item">
+                <div className={`status-badge ${getStatusClass('UPLOADED')}`}>
+                  {getStatusText('UPLOADED')}
+                </div>
+                <p>The Excel file has been uploaded and is ready to be processed. Click the ▶️ button to generate the policy report.</p>
+              </div>
+              <div className="status-info-item">
+                <div className={`status-badge ${getStatusClass('PROCESSING')}`}>
+                  {getStatusText('PROCESSING')}
+                </div>
+                <p>The report is currently being generated. This typically takes 1-2 minutes. The page will automatically update when complete.</p>
+              </div>
+              <div className="status-info-item">
+                <div className={`status-badge ${getStatusClass('COMPLETED')}`}>
+                  {getStatusText('COMPLETED')}
+                </div>
+                <p>The report has been successfully generated. You can view the PDF, check settings, or regenerate with updated configuration.</p>
+              </div>
+              <div className="status-info-item">
+                <div className={`status-badge ${getStatusClass('FAILED')}`}>
+                  {getStatusText('FAILED')}
+                </div>
+                <p>An error occurred during report generation. Click the report card to view error details, then try processing again after fixing any issues.</p>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

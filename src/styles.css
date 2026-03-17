@@ -156,7 +156,7 @@ blockquote {
 }
 
 .file-input-label {
-  background-color: #007bff;
+  background-color: #6f42c1;
   color: white;
   padding: 10px 20px;
   border-radius: 4px;
@@ -164,6 +164,85 @@ blockquote {
 }
 
 /* Reports grid */
+.reports-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 10px 15px;
+  background-color: none;
+  border-radius: 8px;
+  min-height: 50px;
+}
+
+.toolbar-left {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.toolbar-right {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.selection-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  background-color: rgb(255, 255, 255, 0.2);
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.selection-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: opacity 0.2s;
+}
+
+.btn-link:hover {
+  opacity: 0.7;
+}
+
+.sort-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+.sort-select {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: none;
+  color: #6f42c1;
+  background-color: rgba(255, 255, 255, 0.2);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sort-select:focus {
+  outline: none;
+  border-color: #6f42c1;;
+}
+
 .reports-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -173,14 +252,39 @@ blockquote {
 .report-card {
   border: 1px solid #ddd;
   border-radius: 8px;
-  padding: 15px;
-  cursor: pointer;
+  padding-left: 15px;
+  padding-right: 15px;
+  padding-top: 8px;
+  padding-bottom: 8px;
   background-color: #f9f9f9;
   transition: transform 0.2s;
 }
 
 .report-card:hover {
   transform: scale(1.02);
+}
+
+.report-card-selected {
+  border-color: #6f42c1;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.3);
+}
+
+.report-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.report-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #6f42c1;
+}
+
+.report-checkbox:hover {
+  transform: scale(1.1);
 }
 
 .report-thumbnail {
@@ -191,6 +295,7 @@ blockquote {
   align-items: center;
   justify-content: center;
   margin-bottom: 10px;
+  cursor: pointer;
   position: relative;
   font-size: 24px;
 }
@@ -210,14 +315,21 @@ blockquote {
 
 /* Status badges */
 .status-badge {
-  position: absolute;
-  top: 5px;
-  right: 5px;
   color: white;
-  padding: 2px 6px;
+  padding: 4px 10px;
   border-radius: 12px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: bold;
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+.status-badge:hover {
+  transform: scale(1.05);
+}
+
+.report-card-header .status-badge {
+  cursor: pointer;
 }
 
 .status-uploading {
@@ -290,6 +402,31 @@ blockquote {
 .status-text {
   margin-left: 10px;
   font-weight: bold;
+}
+
+/* Status Info Modal */
+.status-info-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 10px 0;
+}
+
+.status-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.status-info-item .status-badge {
+  align-self: flex-start;
+}
+
+.status-info-item p {
+  margin: 0;
+  line-height: 1.6;
+  color: #555;
+  font-size: 14px;
 }
 
 .error-text {
