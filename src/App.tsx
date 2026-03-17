@@ -1,7 +1,7 @@
 import { useAuthenticator, Icon } from '@aws-amplify/ui-react';
 import { useEffect, useRef, useState } from 'react';
 import { generateClient } from 'aws-amplify/data';
-import { remove } from 'aws-amplify/storage';
+import { remove, uploadData } from 'aws-amplify/storage';
 import type { Schema } from '../amplify/data/resource';
 import { ReportsList } from './components/ReportsList';
 import FeedbackChat from './components/feedback_chat';
@@ -16,16 +16,50 @@ function App() {
   const [reports, setReports] = useState<Array<Schema["PolicyReport"]["type"]>>([]);
   const [showAbout, setShowAbout] = useState(false);
   const [showFeedbackGallery, setShowFeedbackGallery] = useState(false);
+  const [loadingExample, setLoadingExample] = useState(false);
   // Tracks IDs that the user has explicitly set back to PROCESSING (regeneration),
   // so the subscription protection doesn't block that intentional transition.
   const processingOverrideIds = useRef(new Set<string>());
 
-
+  const TranslateIcon = ({ title }: { title?: string }) => {
+    const [showHelp, setShowHelp] = useState(false);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+      if (!showHelp) return;
+      const handler = (e: MouseEvent) => {
+        if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+          setShowHelp(false);
+        }
+      };
+      document.addEventListener('mousedown', handler);
+      return () => document.removeEventListener('mousedown', handler);
+    }, [showHelp]);
+    return (
+      <div ref={wrapperRef} className="btn-secondary translate-wrapper" title={showHelp ? undefined : title}>
+        <Icon className="btn translate-btn-icon" onClick={() => setShowHelp(h => !h)}>
+          <svg viewBox="0 0 16 16" width="24" height="24">
+            <path fill="currentColor" fillOpacity="0.5" d="M0 2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v3h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-3H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zm7.138 9.995q.289.451.63.846c-.748.575-1.673 1.001-2.768 1.292.178.217.451.635.555.867 1.125-.359 2.08-.844 2.886-1.494.777.665 1.739 1.165 2.93 1.472.133-.254.414-.673.629-.89-1.125-.253-2.057-.694-2.82-1.284.681-.747 1.222-1.651 1.621-2.757H14V8h-3v1.047h.765c-.318.844-.74 1.546-1.272 2.13a6 6 0 0 1-.415-.492 2 2 0 0 1-.94.31"/>
+            <path fill="currentColor" d="M4.545 6.714 4.11 8H3l1.862-5h1.284L8 8H6.833l-.435-1.286zm1.634-.736L5.5 3.956h-.049l-.679 2.022z"/>
+          </svg>
+        </Icon>
+        {showHelp && (
+          <div className="translate-popover">
+            <p>Use your browser's built-in translation:</p>
+            <ul>
+              <li><strong>Chrome / Edge:</strong> Click the translate icon in the address bar, or right-click the page and select "Translate to…"</li>
+              <li><strong>Firefox:</strong> Click the translate icon in the address bar</li>
+              <li><strong>Safari:</strong> Use the Page menu → "Translate Page"</li>
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const SignOutIcon = ({ title }: { title?: string }) => {
     return (
       <div title={title}>
-        <Icon className="btn btn-secondary" onClick={signOut}>
+        <Icon className="btn btn-secondary sign-out" onClick={signOut}>
           <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
           <polyline points="16 17 21 12 16 7"></polyline>
@@ -202,6 +236,32 @@ function App() {
     }
   };
 
+  const handleLoadExample = async () => {
+    if (loadingExample) return;
+    const exampleFileName = 'gohsc-policy-indicator-checklist-example-ES-Las-Palmas-2023.xlsx';
+    const existingReport = reports.filter(r => r !== null).find(r => r.fileName === exampleFileName);
+    if (existingReport) {
+      alert(`"${exampleFileName}" already exists. Please delete the existing report before uploading again.`);
+      return;
+    }
+    setLoadingExample(true);
+    try {
+      const response = await fetch(`/${exampleFileName}`);
+      if (!response.ok) throw new Error(`Failed to fetch example file: ${response.statusText}`);
+      const blob = await response.blob();
+      const file = new File([blob], exampleFileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const username = (user?.username || 'unknown').replace(/[^a-zA-Z0-9-]/g, '').substring(0, 50);
+      const fileKey = `public/${username}/${exampleFileName}`;
+      await uploadData({ path: fileKey, data: file, options: { contentType: file.type } }).result;
+      await handleUploadComplete(exampleFileName, file.size, fileKey);
+    } catch (error) {
+      console.error('Failed to load example report:', error);
+      alert(`Failed to load example report: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoadingExample(false);
+    }
+  };
+
   const handleProcessReport = async (report: Schema["PolicyReport"]["type"]) => {
     if (!report.fileKey) {
       alert('Cannot process report: file key is missing');
@@ -282,17 +342,24 @@ function App() {
     <main className="main-container">
       <header className="header">
         <div>
-          <h1>GHSCI Policy</h1>
+          <div className="title-row">
+            <h1>GHSCI Policy</h1>
+            <img src="/GOHSC - white logo transparent-01.svg" alt="GOHSC logo" className="title-logo" />
+          </div>
           <h2>Global Healthy and Sustainable City Indicators Policy analysis and reporting tool</h2 >
           <p>A tool to support analysis and reporting of policy indicators for the Global Observatory of Healthy and Sustainable Cities' <a href="https://www.healthysustainablecities.org/1000cities/" target="_blank" rel="noopener noreferrer">1000 Cities Challenge</a>.</p>
           <p>Developed out of RMIT University's Centre for Urban Research by <a href="https://cur.org.au/people/carl-higgs/" target="_blank" rel="noopener noreferrer">Dr Carl Higgs</a> and <a href="https://cur.org.au/people/dr-melanie-lowe/" target="_blank" rel="noopener noreferrer">Dr Melanie Lowe</a> with the support of <a href="https://www.rmit.edu.au/partner/hubs/race" target="_blank" rel="noopener noreferrer">RMIT's Advanced Cloud Ecosystem Hub</a> and the <a href="https://www.healthysustainablecities.org/" target="_blank" rel="noopener noreferrer">Global Observatory of Healthy and Sustainable Cities</a>.
           </p>
           <p>To get started, visit the <a href="https://github.com/healthysustainablecities/global-indicators/wiki/1.-Policy-Indicators" target="_blank" rel="noopener noreferrer">GOHSC Policy Indicators</a> wiki and download the policy checklist Excel (.xlsx) audit tool.  Once the tool has been completed for city or region of interest, drop it in the app to get your city's score and generate a PDF report.</p>
           <p><button className="about-link" onClick={() => setShowAbout(true)}>Find out more</button></p>
+          <p><button className="about-link" onClick={handleLoadExample} disabled={loadingExample}>{loadingExample ? 'Loading example...' : 'Load an example report'}</button></p>
           <p><button className="about-link" title="View and track feedback submitted using the feedback widget" onClick={() => setShowFeedbackGallery(true)}>Feedback gallery</button></p>
         </div>
         
-        <SignOutIcon title={user?.signInDetails?.loginId || undefined}/>
+        <div className="header-actions">
+          <TranslateIcon title="Translate this page" />
+          <SignOutIcon title={"Sign out: " + (user?.signInDetails?.loginId || undefined)}/>
+        </div>
       </header>
 
       {showAbout && (

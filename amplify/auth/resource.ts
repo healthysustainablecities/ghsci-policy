@@ -9,4 +9,32 @@ export const auth = defineAuth({
     email: true,
   },
   groups: ['Admins'],
+  userAttributes: {
+    // 'name' is a standard Cognito attribute available in every User Pool by default —
+    // no declaration needed here; it is collected via the sign-up form's formFields config.
+    'custom:city': {
+      dataType: 'String',
+      mutable: true,
+    },
+    'custom:country': {
+      dataType: 'String',
+      mutable: true,
+    },
+    'custom:affiliation': {
+      dataType: 'String',
+      mutable: true,
+    },
+    'custom:lat': {
+      dataType: 'String',
+      mutable: true,
+    },
+    'custom:lon': {
+      dataType: 'String',
+      mutable: true,
+    },
+    'custom:contact_optin': {
+      dataType: 'String',
+      mutable: true,
+    },
+  },
 });

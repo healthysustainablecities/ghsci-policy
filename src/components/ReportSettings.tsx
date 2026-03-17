@@ -308,7 +308,7 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
     const images = config.reporting?.images || {};
     
     return (
-      <div className="settings-summary">
+      <div className="settings-summary" translate="no">
         <div className="summary-item"><strong>DOI:</strong> {doi}</div>
         <div className="summary-item"><strong>City:</strong> {city}</div>
         <div className="summary-item"><strong>Country:</strong> {country}</div>

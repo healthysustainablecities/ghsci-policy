@@ -344,6 +344,22 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
     });
   };
 
+  const handleDownloadXlsx = async (report: ReportsListProps['reports'][number]) => {
+    if (!report?.fileKey) return;
+    try {
+      const { url } = await getUrl({ path: report.fileKey });
+      const link = document.createElement('a');
+      link.href = url.toString();
+      link.download = report.fileName || 'policy_checklist.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Failed to download xlsx:', error);
+      alert('Failed to download the policy checklist file.');
+    }
+  };
+
   const handleDownloadJson = (jsonString: string, fileName: string) => {
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -530,6 +546,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                 onClick={handleSelectAll}
                 className="btn-link btn-link-primary"
                 title="Select all reports"
+                disabled={reports.filter(r => r !== null).length === 0}
               >
                 Select all
               </button>
@@ -607,17 +624,27 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                 className="report-checkbox"
                 title="Select for deletion"
               />
-              <div 
-                className={`status-badge ${getStatusClass(report.status || 'PROCESSING')}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowStatusInfo(true);
-                }}
-                style={{ cursor: 'pointer' }}
-                title="Click for status info"
-              >
-                {getStatusText(report.status || 'PROCESSING')}
-              </div>
+              <span>
+                <div
+                  className="status-badge xlsx-badge"
+                  onClick={(e) => { e.stopPropagation(); handleDownloadXlsx(report); }}
+                  style={{ cursor: 'pointer' }}
+                  title="Download policy checklist .xlsx file"
+                >
+                  xlsx
+                </div>
+                <div 
+                  className={`status-badge ${getStatusClass(report.status || 'PROCESSING')}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowStatusInfo(true);
+                  }}
+                  style={{ cursor: 'pointer' }}
+                  title="Click for status info"
+                >
+                  {getStatusText(report.status || 'PROCESSING')}
+                </div>
+              </span>
             </div>
 
             {/* Clickable thumbnail/scorecard */}
@@ -744,7 +771,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             <div className="report-detail-info">
               {meta.reviewer && (
                 <div className="detail-row">
-                  <span className="detail-label">Reviewer</span>
+                  <span className="detail-label">Reviewer: </span>
                   <span>{meta.reviewer}</span>
                 </div>
               )}
@@ -755,26 +782,26 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                 </div>
               )}
               <div className="detail-row">
-                <span className="detail-label">Status</span>
+                <span className="detail-label">Status: </span>
                 <span className={`status-text ${getStatusClass(selectedReport.status || 'PROCESSING')}`}>
                   {getStatusText(selectedReport.status || 'PROCESSING')}
                 </span>
               </div>
               {selectedReport.uploadedAt && (
                 <div className="detail-row">
-                  <span className="detail-label">Uploaded</span>
+                  <span className="detail-label">Uploaded: </span>
                   <span>{formatDateYYYYMMDD(selectedReport.uploadedAt)}</span>
                 </div>
               )}
               {selectedReport.completedAt && (
                 <div className="detail-row">
-                  <span className="detail-label">Completed</span>
+                  <span className="detail-label">Completed: </span>
                   <span>{formatDateYYYYMMDD(selectedReport.completedAt)}</span>
                 </div>
               )}
               {selectedReport.errorMessage && (
                 <div className="detail-row error-text">
-                  <span className="detail-label">Error</span>
+                  <span className="detail-label">Error: </span>
                   <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{selectedReport.errorMessage}</span>
                 </div>
               )}
@@ -798,7 +825,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
 
             {/* Checklist tables */}
             {policyData && (
-              <div className="checklist-section">
+              <div className="checklist-section" translate="no">
                 {Object.entries(policyData).filter(([k]) => !k.startsWith('_')).map(([indicator, measures]) => {
                   const isOpen = expandedIndicator === indicator;
                   return (
