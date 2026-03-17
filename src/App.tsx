@@ -413,7 +413,7 @@ function App() {
                 part of the <a href="https://www.thelancet.com/series-do/urban-design-transport-and-health" target="_blank" rel="noopener noreferrer">Lancet Global Health Series on Urban Design, Transport and Health (2022)</a>.
               </p>
               <blockquote>
-                Boeing G, Higgs C, Liu S, Giles-Corti B, Sallis JF, Cerin E, Lowe M, Adlakha D, Hinckson E, Moudon AV, Salvo D, Adams MA, Barrozo LV, Bozovic T, Delclòs-Alió X, Dygrýn J, Ferguson S, Gebel K, Ho TP, Lai P-C, Martori JC, Nitvimol K, Queralt A, Roberts JD, Sambo GH, Schipperijn J, Vale D, Van de Weghe N, Vich G, Arundel J. Using open data and open-source software to develop spatial indicators of urban design and transport features for achieving healthy and sustainable cities. The Lancet Global Health. 2022 2022/06//;10(6):e907-e918. en. doi: <a href="https://doi.org/10.1016/S2214-109X(22)00072-9" target="_blank" rel="noopener noreferrer">https://doi.org/10.1016/S2214-109X(22)00072-9</a>.
+                Lowe M, Adlakha D, Sallis JF, Salvo D, Cerin E, Moudon AV, Higgs C, Hinckson E, Arundel J, Boeing G, Liu S, Mansour P, Gebel K, Puig-Ribera A, Mishra PB, Bozovic T, Carson J, Dygrýn J, Florindo AA, Ho TP, Hook H, Hunter RF, Lai P-C, Molina-García J, Nitvimol K, Oyeyemi AL, Ramos CDG, Resendiz E, Troelsen J, Witlox F, Giles-Corti B. City planning policies to support health and sustainability: an international comparison of policy indicators for 25 cities. The Lancet Global Health. 2022;10(6):e882-e894. en. <a href="https://doi.org/10.1016/S2214-109X(22)00069-9" target="_blank" rel="noopener noreferrer">https://doi.org/10.1016/S2214-109X(22)00069-9</a>.
               </blockquote>
             </div>
           </div>
