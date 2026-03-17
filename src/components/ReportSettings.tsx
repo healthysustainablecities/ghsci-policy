@@ -27,7 +27,7 @@ export interface ReportConfig {
         }>;
       };
     };
-    custom_blurb_fontsize?: number; // Optional custom font size for report blurb, e.g. 11 for 11px
+    custom_text_box_fontsize?: number; // Optional custom font size for report blurb, e.g. 11 for 11px
   };
 }
 
@@ -47,10 +47,10 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
     reporting: {
       doi: '',
       images: {
-        '1': { file: 'Example image of a vibrant, walkable, urban neighbourhood - landscape.jpg', credit: 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Carl Higgs, Bing Image Creator, 2023' },
-        '2': { file: 'Example image 2-Landscape.jpg', credit: 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Eugen Resendiz, Bing Image Creator, 2023' },
-        '3': { file: 'Example image of a vibrant, walkable, urban neighbourhood - square.jpg', credit: 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Carl Higgs, Bing Image Creator, 2023' },
-        '4': { file: 'Example image of climate resilient lively city watercolor-Square.jpg', credit: 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Eugen Resendiz, Bing Image Creator, 2023' },
+        '1': { file: 'Example image of a vibrant, walkable, urban neighbourhood - landscape.jpg', credit: 'e.g. Image Licence Owner Name, YYYY' },
+        '2': { file: 'Example image 2-Landscape.jpg', credit: 'e.g. Image Licence Owner Name, YYYY' },
+        '3': { file: 'Example image of a vibrant, walkable, urban neighbourhood - square.jpg', credit: 'e.g. Image Licence Owner Name, YYYY' },
+        '4': { file: 'Example image of climate resilient lively city watercolor-Square.jpg', credit: 'e.g. Image Licence Owner Name, YYYY' },
       },
       languages: {
         English: {
@@ -81,14 +81,16 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
           ]
         }
       },
-      custom_blurb_fontsize: 12
+      custom_text_box_fontsize: 12
     }
   });
 
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [bgImageUrl, setBgImageUrl] = useState<string | null>(null);
+  const [imagePreviews, setImagePreviews] = useState<{ [key: string]: string }>({});
+  const [dragActive, setDragActive] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<{ [key: string]: string }>({});
 
   useEffect(() => {
     // Load existing config from report if available
@@ -113,31 +115,46 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
             doi: existingConfig?.reporting?.doi || '',
             images: existingConfig?.reporting?.images || config.reporting?.images || {},
             languages: existingConfig?.reporting?.languages || config.reporting?.languages || {},
-            custom_blurb_fontsize: existingConfig?.reporting?.custom_blurb_fontsize || 12
+            custom_text_box_fontsize: existingConfig?.reporting?.custom_text_box_fontsize || 12
           }
         };
         
         setConfig(loadedConfig);
+        
+        // Load image URLs for summary view
+        loadImageUrls(loadedConfig);
       } catch (error) {
         console.error('Failed to parse existing config:', error);
       }
     }
   }, [report.id]);
 
-  useEffect(() => {
-    const s3Key = config.reporting?.images?.['1']?.s3Key;
-    if (!s3Key) {
-      setBgImageUrl(null);
-      return;
+  const loadImageUrls = async (cfg: ReportConfig) => {
+    const images = cfg.reporting?.images || {};
+    const urls: { [key: string]: string } = {};
+    
+    for (const [num, img] of Object.entries(images)) {
+      if (img.s3Key) {
+        try {
+          const { url } = await getUrl({ path: img.s3Key });
+          urls[num] = url.toString();
+        } catch (error) {
+          console.error(`Failed to load image ${num}:`, error);
+        }
+      }
     }
-    getUrl({ path: s3Key })
-      .then(({ url }) => setBgImageUrl(url.toString()))
-      .catch(() => setBgImageUrl(null));
-  }, [config.reporting?.images?.['1']?.s3Key]);
+    
+    setImageUrls(urls);
+  };
 
   const handleImageUpload = async (imageNumber: string, file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('Please upload an image file');
+      return;
+    }
+
+    if (!file.type.match(/^image\/(jpeg|jpg|png)$/)) {
+      alert('Please upload a JPG or PNG image');
       return;
     }
 
@@ -148,6 +165,17 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
     }
 
     setUploadingImage(imageNumber);
+    
+    // Generate preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreviews(prev => ({
+        ...prev,
+        [imageNumber]: reader.result as string
+      }));
+    };
+    reader.readAsDataURL(file);
+
     try {
       const username = sanitizeUserId(user?.username || 'unknown');
       // Use filename-based key (no timestamp) so re-uploading the same file reuses the same S3 object
@@ -162,25 +190,54 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
       });
 
       // Update config with S3 key
-      setConfig(prev => ({
-        ...prev,
+      const newConfig = {
+        ...config,
         reporting: {
-          ...prev.reporting,
+          ...config.reporting,
           images: {
-            ...prev.reporting?.images,
+            ...config.reporting?.images,
             [imageNumber]: {
-              ...prev.reporting?.images?.[imageNumber],
+              ...config.reporting?.images?.[imageNumber],
               file: file.name,
               s3Key: `public/${key}`
             }
           }
         }
+      };
+      setConfig(newConfig);
+      
+      // Update imageUrls for immediate display
+      const { url } = await getUrl({ path: `public/${key}` });
+      setImageUrls(prev => ({
+        ...prev,
+        [imageNumber]: url.toString()
       }));
     } catch (error) {
       console.error('Failed to upload image:', error);
       alert('Failed to upload image. Please try again.');
     } finally {
       setUploadingImage(null);
+    }
+  };
+
+  const handleDrag = (e: React.DragEvent, imageNumber: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(imageNumber);
+    } else if (e.type === "dragleave") {
+      setDragActive(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, imageNumber: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(null);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      handleImageUpload(imageNumber, file);
     }
   };
 
@@ -265,24 +322,43 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
           const summary = item[key][0]?.summary || 'Not set';
           return (
             <div key={idx} className="summary-item">
-              <strong>{key}:</strong> {summary.substring(0, 100)}{summary.length > 100 ? '...' : ''}
-            </div>
-          );
-        })}
-        
-        {['1', '2', '3', '4'].map(num => {
-          const img = images[num];
-          const filename = img?.file || 'Not set';
-          const credit = img?.credit ? ` (${img.credit.substring(0, 50)}${img.credit.length > 50 ? '...' : ''})` : '';
-          return (
-            <div key={num} className="summary-item">
-              <strong>Image {num}:</strong> {filename}{credit}
+              <strong>{key}</strong> <div className="summary-text">{summary}</div>
             </div>
           );
         })}
         <div className="summary-item">
-          <strong>Blurb font size:</strong> {config.reporting?.custom_blurb_fontsize ?? 12}pt
+          <strong>Custom text box font size</strong> {config.reporting?.custom_text_box_fontsize ?? 12}
         </div>
+        {['1', '2', '3', '4'].map(num => {
+          const img = images[num];
+          const hasImage = img?.file && img.file !== 'Not set';
+          return (
+            <div key={num} className="summary-item summary-item-image">
+              <strong>Image {num}</strong>
+              {hasImage ? (
+                <div className="summary-image-content">
+                  {imageUrls[num] || imagePreviews[num] ? (
+                    <img 
+                      src={imageUrls[num] || imagePreviews[num]} 
+                      alt={`Image ${num}`} 
+                      className="summary-thumbnail" 
+                    />
+                  ) : null}
+                  <div className="summary-image-info">
+                    <div className="image-filename">✓ {img.file}</div>
+                    {img?.credit && (
+                      <div className="image-credit">
+                        <strong>Credit</strong> {img.credit}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <span>Not set</span>
+              )}
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -292,7 +368,7 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
       <div className="settings-content">
         <div className="settings-section">
           <label className="settings-field">
-            <span>DOI (optional):</span>
+            <span>DOI (optional)</span>
             <input
               type="text"
               placeholder="https://doi.org/10.xxxxx"
@@ -302,7 +378,7 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
           </label>
 
           <label className="settings-field">
-            <span>City Name:</span>
+            <span>City Name</span>
             <input
               type="text"
               value={config.reporting?.languages?.English?.name || ''}
@@ -311,7 +387,7 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
           </label>
           
           <label className="settings-field">
-            <span>Country:</span>
+            <span>Country</span>
             <input
               type="text"
               value={config.reporting?.languages?.English?.country || ''}
@@ -330,7 +406,7 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
             const actualIdx = config.reporting?.languages?.English?.context?.findIndex(ctx => Object.keys(ctx)[0] === key) || idx;
             return (
               <label key={actualIdx} className="settings-field">
-                <span>{key}:</span>
+                <span>{key}</span>
                 <textarea
                   rows={3}
                   value={data.summary || ''}
@@ -345,34 +421,65 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
           })}
           
           <label className="settings-field">
-            <span>Custom blurb font size:</span>
+            <span>Custom text box font size</span>
             <input
               type="number"
               min={6}
               max={20}
               step={0.5}
-              value={config.reporting?.custom_blurb_fontsize ?? 12}
-              onChange={(e) => updateConfig(['reporting', 'custom_blurb_fontsize'], parseFloat(e.target.value) || 12)}
+              value={config.reporting?.custom_text_box_fontsize ?? 12}
+              onChange={(e) => updateConfig(['reporting', 'custom_text_box_fontsize'], parseFloat(e.target.value) || 12)}
             />
           </label>
 
-          <p className="settings-help" style={{ marginTop: '20px' }}>Images 1-2: 2100px × 1000px (21:10 ratio), Images 3-4: 1000px × 1000px (1:1 ratio)</p>
           {['1', '2', '3', '4'].map(num => (
             <div key={num} className="image-upload-item">
-              <label>Image {num}:</label>
+              <label>Image {num} {parseInt(num) in [1, 2] ? '(Landscape; 21:10 ratio, e.g. 2100px × 1000px)' : '(Square; 1:1 ratio, e.g. 1000px × 1000px)'}</label>
+              
+              <div 
+                className={`image-dropzone ${dragActive === num ? 'drag-active' : ''}`}
+                onDragEnter={(e) => handleDrag(e, num)}
+                onDragLeave={(e) => handleDrag(e, num)}
+                onDragOver={(e) => handleDrag(e, num)}
+                onDrop={(e) => handleDrop(e, num)}
+                onClick={() => document.getElementById(`file-input-${num}`)?.click()}
+              >
+                {uploadingImage === num ? (
+                  <div className="dropzone-content">
+                    <span className="uploading-text">⏳ Uploading...</span>
+                  </div>
+                ) : imagePreviews[num] ? (
+                  <div className="dropzone-content">
+                    <img src={imagePreviews[num]} alt={`Preview ${num}`} className="image-thumbnail" />
+                    <span className="image-filename">✓ {config.reporting?.images?.[num]?.file}</span>
+                  </div>
+                ) : config.reporting?.images?.[num]?.file ? (
+                  <div className="dropzone-content">
+                    <span className="image-filename">✓ {config.reporting.images[num].file}</span>
+                    <p className="dropzone-hint">Click or drag to replace</p>
+                  </div>
+                ) : (
+                  <div className="dropzone-content">
+                    <span className="dropzone-icon">📷</span>
+                    <p className="dropzone-text">Drag and drop JPG/PNG image here</p>
+                    <p className="dropzone-hint">or click to browse</p>
+                  </div>
+                )}
+              </div>
+              
               <input
+                id={`file-input-${num}`}
                 type="file"
-                accept="image/jpeg,image/jpg"
+                accept="image/jpeg,image/jpg,image/png"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) handleImageUpload(num, file);
                 }}
                 disabled={uploadingImage === num}
+                style={{ display: 'none' }}
               />
-              {uploadingImage === num && <span className="uploading-text">Uploading...</span>}
-              {config.reporting?.images?.[num]?.file && (
-                <span className="image-filename">✓ {config.reporting.images[num].file}</span>
-              )}
+              
+              <label className="credit-label">Credit</label>
               <input
                 type="text"
                 placeholder="Image credit/licence"
