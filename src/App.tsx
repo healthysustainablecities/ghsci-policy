@@ -4,6 +4,8 @@ import { generateClient } from 'aws-amplify/data';
 import { remove } from 'aws-amplify/storage';
 import type { Schema } from '../amplify/data/resource';
 import { ReportsList } from './components/ReportsList';
+import FeedbackChat from './components/feedback_chat';
+import FeedbackGallery from './components/feedback_gallery';
 import outputs from '../amplify_outputs.json';
 import './styles.css';
 
@@ -13,6 +15,7 @@ function App() {
   const { user, signOut } = useAuthenticator();
   const [reports, setReports] = useState<Array<Schema["PolicyReport"]["type"]>>([]);
   const [showAbout, setShowAbout] = useState(false);
+  const [showFeedbackGallery, setShowFeedbackGallery] = useState(false);
   // Tracks IDs that the user has explicitly set back to PROCESSING (regeneration),
   // so the subscription protection doesn't block that intentional transition.
   const processingOverrideIds = useRef(new Set<string>());
@@ -282,10 +285,11 @@ function App() {
           <h1>GHSCI Policy</h1>
           <h2>Global Healthy and Sustainable City Indicators Policy analysis and reporting tool</h2 >
           <p>A tool to support analysis and reporting of policy indicators for the Global Observatory of Healthy and Sustainable Cities' <a href="https://www.healthysustainablecities.org/1000cities/" target="_blank" rel="noopener noreferrer">1000 Cities Challenge</a>.</p>
-          <p>Developed out of RMIT University's Centre for Urban Research by <a href="https://cur.org.au/people/carl-higgs/" target="_blank" rel="noopener noreferrer">Dr Carl Higgs</a> and <a href="https://cur.org.au/people/melanie-lowe/" target="_blank" rel="noopener noreferrer">Dr Melanie Lowe</a> with the support of <a href="https://www.rmit.edu.au/partner/hubs/race" target="_blank" rel="noopener noreferrer">RMIT's Advanced Cloud Ecosystem Hub</a> and the <a href="https://www.healthysustainablecities.org/" target="_blank" rel="noopener noreferrer">Global Observatory of Healthy and Sustainable Cities</a>.
+          <p>Developed out of RMIT University's Centre for Urban Research by <a href="https://cur.org.au/people/carl-higgs/" target="_blank" rel="noopener noreferrer">Dr Carl Higgs</a> and <a href="https://cur.org.au/people/dr-melanie-lowe/" target="_blank" rel="noopener noreferrer">Dr Melanie Lowe</a> with the support of <a href="https://www.rmit.edu.au/partner/hubs/race" target="_blank" rel="noopener noreferrer">RMIT's Advanced Cloud Ecosystem Hub</a> and the <a href="https://www.healthysustainablecities.org/" target="_blank" rel="noopener noreferrer">Global Observatory of Healthy and Sustainable Cities</a>.
           </p>
           <p>To get started, visit the <a href="https://github.com/healthysustainablecities/global-indicators/wiki/1.-Policy-Indicators" target="_blank" rel="noopener noreferrer">GOHSC Policy Indicators</a> wiki and download the policy checklist Excel (.xlsx) audit tool.  Once the tool has been completed for city or region of interest, drop it in the app to get your city's score and generate a PDF report.</p>
-          <button className="about-link" onClick={() => setShowAbout(true)}>Find out more</button>
+          <p><button className="about-link" onClick={() => setShowAbout(true)}>Find out more</button></p>
+          <p><button className="about-link" title="View and track feedback submitted using the feedback widget" onClick={() => setShowFeedbackGallery(true)}>Feedback gallery</button></p>
         </div>
         
         <SignOutIcon title={user?.signInDetails?.loginId || undefined}/>
@@ -359,6 +363,12 @@ function App() {
           user={user}
         />
       </div>
+
+      {showFeedbackGallery && (
+        <FeedbackGallery onClose={() => setShowFeedbackGallery(false)} />
+      )}
+
+      <FeedbackChat />
     </main>
   );
 }

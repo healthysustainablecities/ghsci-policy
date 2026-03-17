@@ -1061,22 +1061,16 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             </div>
             <div className="status-info-content">
               <div className="status-info-item">
-                <div className={`status-badge ${getStatusClass('UPLOADED')}`}>
-                  {getStatusText('UPLOADED')}
-                </div>
-                <p>The Excel file has been uploaded and is ready to be processed. Click the ▶️ button to generate the policy report.</p>
-              </div>
-              <div className="status-info-item">
                 <div className={`status-badge ${getStatusClass('PROCESSING')}`}>
                   {getStatusText('PROCESSING')}
                 </div>
-                <p>The report is currently being generated. This typically takes 1-2 minutes. The page will automatically update when complete.</p>
+                <p>The policy checklist report is currently being generated. This typically takes under a minute. The page will automatically update when complete.</p>
               </div>
               <div className="status-info-item">
                 <div className={`status-badge ${getStatusClass('COMPLETED')}`}>
                   {getStatusText('COMPLETED')}
                 </div>
-                <p>The report has been successfully generated. You can view the PDF, check settings, or regenerate with updated configuration.</p>
+                <p>The policy checklist report has been successfully generated. You can view summary details, download the PDF, check and re-configure settings with updated summary prose and images, and regenerate using updated configuration settings.</p>
               </div>
               <div className="status-info-item">
                 <div className={`status-badge ${getStatusClass('FAILED')}`}>

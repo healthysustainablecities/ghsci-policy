@@ -41,6 +41,21 @@ const schema = a.schema({
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(triggerProcessing)),
 
+  Feedback: a
+    .model({
+      comment: a.string().required(),
+      email: a.string(),
+      datetime: a.datetime(),
+      url: a.string(),
+      category: a.enum(['Bug', 'Feature', 'General']),
+      resolved: a.boolean(),
+    })
+    .authorization((allow) => [
+      allow.authenticated().to(['create', 'read']),
+      allow.owner().to(['read']),
+      allow.group('Admins'),
+    ]),
+
   // AI Conversation for policy analysis
   policyChat: a.conversation({
     aiModel: a.ai.model('Claude Sonnet 4.6' as any),
