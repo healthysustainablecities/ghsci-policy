@@ -1,6 +1,6 @@
 ## GHSCI Policy
 
-The **Global Healthy and Sustainable City Indicators (GHSCI) Policy** analysis and reporting tool has been developed to support stakeholders participating in the [1000 Cities Challenge](https://www.healthysustainablecities.org/1000cities/) of the [Global Observatory of Healthy and Sustainable Cities (GOHSC)](https://www.healthysustainablecities.org/).
+The **Global Healthy and Sustainable City Indicators (GHSCI) Policy** analysis and reporting tool has been developed as a pilot proof-of-concept application to support and gather feedback from stakeholders participating in the [1000 Cities Challenge](https://www.healthysustainablecities.org/1000cities/) of the [Global Observatory of Healthy and Sustainable Cities (GOHSC)](https://www.healthysustainablecities.org/).
 
 ## Overview
 
