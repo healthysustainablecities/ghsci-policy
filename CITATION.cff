@@ -1,0 +1,59 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+    - family-names: Higgs
+      given-names: Carl
+      orcid: https://orcid.org/0000-0002-5903-9095
+    - family-names: Lowe
+      given-names: Melanie
+      orcid: https://orcid.org/0000-0002-9703-1895
+    - family-names: Adlakha
+      given-names: Deepti
+      orcid: https://orcid.org/0000-0002-1720-6780
+    - family-names: Resendiz
+      given-names: Eugen
+      orcid: https://orcid.org/0000-0002-4500-879X
+    - family-names: Salvo
+      given-names: Deborah
+      orcid: https://orcid.org/0000-0002-9726-0882
+    - family-names: Hinckson
+      given-names: Erica
+      orcid: https://orcid.org/0000-0003-3928-7830
+    - family-names: Liu
+      given-names: Shiqin
+      orcid: https://orcid.org/0000-0001-9605-3251
+    - family-names: Boeing
+      given-names: Geoff
+      orcid: https://orcid.org/0000-0003-1851-6411
+    - family-names: Cerin
+      given-names: Ester
+      orcid: https://orcid.org/0000-0002-7599-165X
+    - family-names: Schifanella
+      given-names: Rossano
+      orcid: https://orcid.org/0000-0002-3745-5792
+    - family-names: Schipperijn
+      given-names: Jasper
+      orcid: https://orcid.org/0000-0002-6558-7610
+    - family-names: Arundel
+      given-names: Jonathan
+      orcid: https://orcid.org/0000-0002-0833-5433
+    - family-names: Heikinheimo
+      given-names: Vuokko
+      orcid: https://orcid.org/0000-0001-5119-0957
+    - family-names: Delclòs-Alió
+      given-names: Xavier
+      orcid: https://orcid.org/0000-0002-7206-2310
+    - family-names: Moudon
+      given-names: Anne Vernez
+      orcid: https://orcid.org/0000-0001-8485-4799
+    - family-names: Sallis
+      given-names: James F.
+      orcid: https://orcid.org/0000-0003-2555-9452
+    - family-names: Giles-Corti
+      given-names: Billie
+      orcid: https://orcid.org/0000-0003-0102-0225
+title: Global Healthy and Sustainable City Indicators (GHSCI) Policy
+version: 1.0
+date-released: 2026-03-18
+url: https://github.com/healthysustainablecities/ghsci-policy
+doi: 10.25439/rmt.31796170
