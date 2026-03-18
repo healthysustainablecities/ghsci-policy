@@ -724,7 +724,7 @@ def validate_no_policy_lacking_policy_name(df):
         policy_name = row.get('Policy')
         policy_empty = (
             pd.isna(policy_name) or 
-            str(policy_name).strip() in ['', 'No', 'nan', 'NaN']
+            str(policy_name).strip() in ['']
         )
         
         if has_details and policy_empty:
