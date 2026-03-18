@@ -352,7 +352,7 @@ blockquote {
 
 .report-card-selected {
   border-color: #6f42c1;
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.3);
+  box-shadow: inset 0 0 0 2px rgba(111, 66, 193, 0.25);
 }
 
 .report-card-header {
@@ -523,6 +523,8 @@ blockquote {
 .error-text {
   color: #dc3545;
 }
+
+
 
 .error-indicator {
   position: absolute;
@@ -1144,24 +1146,56 @@ blockquote {
   overflow: hidden;
 }
 
-.report-detail-modal .modal-header {
+.modal-top {
   flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-title {
+  flex: 1;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 300;
 }
 
 .report-detail-info {
+  width: 60%;
   flex-shrink: 0;
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 6px 16px;
-  padding: 12px 0;
-  border-bottom: 1px solid #eee;
-  font-size: 14px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.report-detail-info td {
+  padding: 2px 8px 2px 0;
+  vertical-align: top;
+}
+
+.report-detail-info td:first-child {
+  width: 1%;
+  white-space: nowrap;
+  padding-right: 16px;
 }
 
 .detail-label {
   font-weight: 600;
   color: #555;
-  white-space: nowrap;
+}
+
+.modal-error {
+  flex-shrink: 1;
+  min-height: 0;
+  max-height: 30vh;
+  overflow-y: auto;
+  padding: 8px 0 4px 0;
+  border-bottom: 1px solid #eee;
+  font-size: 13px;
+  color: #dc3545;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ── Score boxes in modal ────────────────────────────────────────────────── */
@@ -1437,4 +1471,93 @@ blockquote {
   text-underline-offset: 2px;
 }
 
+/* ── Touch devices: disable hover transforms that stick after tap ──────── */
+@media (hover: none) {
+  .report-card:hover {
+    transform: none;
+  }
+  .report-checkbox:hover {
+    transform: none;
+  }
+  .status-badge:hover {
+    transform: none;
+  }
+  .feedback-fab:hover {
+    transform: none;
+  }
+  .btn-icon:hover {
+    transform: none;
+  }
+}
+
+/* ── Small-screen layout (≤ 640 px) ─────────────────────────────────────── */
+@media (max-width: 640px) {
+  .main-container {
+    padding: 12px;
+  }
+
+  .header {
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .reports-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    min-height: auto;
+    padding: 8px 0;
+  }
+
+  .toolbar-left,
+  .toolbar-right {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .selection-controls {
+    flex-wrap: wrap;
+  }
+
+  .sort-label {
+    flex-wrap: wrap;
+  }
+
+  .sort-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Single-column grid on phones; minmax guard prevents card from exceeding viewport */
+  .reports-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
+    gap: 12px;
+  }
+
+  /* Larger touch target for checkbox */
+  .report-checkbox {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+  }
+
+  /* Stack modal header on narrow screens */
+  .modal-top {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .report-detail-info {
+    width: 100%;
+  }
+
+  .modal-scores {
+    flex-wrap: wrap;
+  }
+
+  .score-box {
+    min-width: 120px;
+  }
+}
 

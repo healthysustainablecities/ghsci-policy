@@ -760,52 +760,50 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
           ? `${meta.city}, ${meta.country}`
           : meta.city || meta.country || selectedReport.fileName;
         return (
-        <div className="modal-overlay">
-          <div className="modal-content report-detail-modal">
-            <div className="modal-header">
-              <button onClick={() => setSelectedReport(null)} className="btn btn-close">🗙</button>
-              <h3 style={{ margin: 0 }}>{titleLine}</h3>
+        <div className="modal-overlay" onClick={() => setSelectedReport(null)}>
+          <div className="modal-content report-detail-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-top">
+              <h3 className="modal-title">{titleLine}</h3>
+              <table className="report-detail-info">
+                <tbody>
+                  {meta.reviewer && (
+                    <tr>
+                      <td className="detail-label">Reviewer</td>
+                      <td>{meta.reviewer}</td>
+                    </tr>
+                  )}
+                  {meta.year && (
+                    <tr>
+                      <td className="detail-label">Date of review</td>
+                      <td>{meta.year}</td>
+                    </tr>
+                  )}
+                  <tr>
+                    <td className="detail-label">Status</td>
+                    <td><span className={`status-badge ${getStatusClass(selectedReport.status || 'PROCESSING')}`}>{getStatusText(selectedReport.status || 'PROCESSING')}</span></td>
+                  </tr>
+                  {selectedReport.uploadedAt && (
+                    <tr>
+                      <td className="detail-label">Uploaded</td>
+                      <td>{formatDateYYYYMMDD(selectedReport.uploadedAt)}</td>
+                    </tr>
+                  )}
+                  {selectedReport.completedAt && (
+                    <tr>
+                      <td className="detail-label">Completed</td>
+                      <td>{formatDateYYYYMMDD(selectedReport.completedAt)}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
 
-            {/* Info rows */}
-            <div className="report-detail-info">
-              {meta.reviewer && (
-                <div className="detail-row">
-                  <span className="detail-label">Reviewer: </span>
-                  <span>{meta.reviewer}</span>
-                </div>
-              )}
-              {meta.year && (
-                <div className="detail-row">
-                  <span className="detail-label">Date of review</span>
-                  <span>{meta.year}</span>
-                </div>
-              )}
-              <div className="detail-row">
-                <span className="detail-label">Status: </span>
-                <span className={`status-text ${getStatusClass(selectedReport.status || 'PROCESSING')}`}>
-                  {getStatusText(selectedReport.status || 'PROCESSING')}
-                </span>
+            {selectedReport.errorMessage && (
+              <div className="modal-error">
+                <span className="detail-label">Error: </span>
+                <span>{selectedReport.errorMessage}</span>
               </div>
-              {selectedReport.uploadedAt && (
-                <div className="detail-row">
-                  <span className="detail-label">Uploaded: </span>
-                  <span>{formatDateYYYYMMDD(selectedReport.uploadedAt)}</span>
-                </div>
-              )}
-              {selectedReport.completedAt && (
-                <div className="detail-row">
-                  <span className="detail-label">Completed: </span>
-                  <span>{formatDateYYYYMMDD(selectedReport.completedAt)}</span>
-                </div>
-              )}
-              {selectedReport.errorMessage && (
-                <div className="detail-row error-text">
-                  <span className="detail-label">Error: </span>
-                  <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{selectedReport.errorMessage}</span>
-                </div>
-              )}
-            </div>
+            )}
 
             {/* Scores */}
             {scores && (

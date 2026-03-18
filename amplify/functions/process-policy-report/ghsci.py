@@ -607,13 +607,64 @@ def get_policy_presence_quality_score_dictionary(xlsx):
 
 
 
-def validate_threshold_vs_target(df: pd.DataFrame):
+
+def validate_policy_checklist(df: pd.DataFrame):
+    """
+    Run all policy checklist validation checks and report failures in plain language.
+    
+    Validates:
+    1. Policies with details must have a policy name
+    2. If measurable target is 'Yes', evidence threshold must be evaluated
+    3. If evidence threshold is evaluated, measurable target must be 'Yes'
+    
+    Args:
+        df: Policy checklist DataFrame
+        
+    Raises:
+        ValueError: If any validation checks fail, with detailed plain-language description
+    """
+    all_errors = []
+    
+    # Run all validation checks
+    checks = [
+        ("Missing policy names", validate_no_policy_lacking_policy_name),
+        ("Measurable targets without evidence evaluation", validate_no_policy_with_measurable_target_but_evidence_basis_not_evaluated),
+        ("Evidence thresholds with non-Yes measurable targets", validate_if_evidence_informed_threshold_evaluated_measurable_is_yes),
+    ]
+    
+    for check_name, check_func in checks:
+        try:
+            is_valid, errors = check_func(df)
+            if not is_valid:
+                all_errors.append((check_name, errors))
+        except Exception as e:
+            # If check raises exception for missing columns, re-raise
+            if "Missing required columns" in str(e):
+                raise
+            all_errors.append((check_name, [(None, f"Check failed: {str(e)}")]))
+    
+    # If there are any errors, format and raise them
+    if all_errors:
+        error_msg = "Policy checklist validation failed:\n\n"
+        
+        for check_name, errors in all_errors:
+            error_msg += f"❌ {check_name} ({len(errors)} issue{'s' if len(errors) != 1 else ''}):\n"
+            for _, error_desc in errors:
+                error_msg += f"   • {error_desc}\n"
+            error_msg += "\n"
+        
+        error_msg += "Please correct these issues and try again."
+        raise ValueError(error_msg)
+
+
+def validate_if_evidence_informed_threshold_evaluated_measurable_is_yes(df: pd.DataFrame):
     """
     Validate that for non-null Policy rows:
     If 'Evidence-informed threshold' is answered (non-null),
-    then 'Measurable target' must not be 'No' or 'Unclear'.
+    then 'Measurable target' must be 'Yes'.
+    
+    Returns: (is_valid, errors_list) where errors_list contains tuples of (row_index, error_description)
     """
-
     required_cols = [
         'Indicators', 'Measures', 'Policies', 'Policy',
         'Measurable target', 'Evidence-informed threshold'
@@ -634,20 +685,88 @@ def validate_threshold_vs_target(df: pd.DataFrame):
     )
 
     inconsistent_rows = df_sub[inconsistent_mask]
+    
+    errors = []
+    for idx, row in inconsistent_rows.iterrows():
+        errors.append((
+            idx,
+            f"Row {idx + 3}: Indicator: {row['Indicators']}, Measure: {row['Measures']}, Policy: {row['Policy']}"
+        ))
+    
+    return len(errors) == 0, errors
+    
 
-    if not inconsistent_rows.empty:
-        # Build a concise message referencing the key identifying fields
-        msg_rows = inconsistent_rows[
-            ['Indicators', 'Measures', 'Policies', 'Policy',
-             'Measurable target', 'Evidence-informed threshold']
-        ]
-
-        raise ValueError(
-            "Logical inconsistency found: 'Evidence-informed threshold' is "
-            "answered but 'Measurable target' is not 'Yes'.\n"
-            "Please review the following records:\n"
-            f"{'\n'.join([str(row) for row in msg_rows[['Indicators','Measures','Policies','Policy']].fillna("").to_dict(orient='records')])}"
+def validate_no_policy_lacking_policy_name(df):
+    """Validate that rows with policy details have a policy name.
+    If any policy-related fields are filled (not 'Not applicable' and not all NA),
+    then the Policy name should not be empty.
+    
+    Returns: (is_valid, errors_list) where errors_list contains tuples of (row_index, error_description)
+    """
+    required_cols = ['Indicators', 'Measures', 'Policies', 'Policy', 'Level of government',
+       'Adoption date', 'Citation', 'Text', 'Mandatory', 'Measurable target',
+       'Measurable target text', 'Evidence-informed threshold',
+       'Threshold explanation']
+    
+    # Get the columns after Policy (index 3) up to but not including qualifier (index -1)
+    policy_detail_cols = required_cols[4:-1]  # Excludes 'Policy' and 'qualifier'
+    
+    errors = []
+    for idx, row in df.iterrows():
+        # Check if any policy detail fields are filled
+        detail_values = [row.get(col) for col in policy_detail_cols if col in df.columns]
+        has_details = any(
+            pd.notna(val) and str(val).strip() not in ['', 'Not applicable']
+            for val in detail_values
         )
+        
+        # Check if Policy name is missing or invalid
+        policy_name = row.get('Policy')
+        policy_empty = (
+            pd.isna(policy_name) or 
+            str(policy_name).strip() in ['', 'No', 'nan', 'NaN']
+        )
+        
+        if has_details and policy_empty:
+            errors.append((
+                idx,
+                f"Row {idx + 3}: Indicator: {row.get('Indicators', 'N/A')}, Measure: {row.get('Measures', 'N/A')}"
+            ))
+    
+    return len(errors) == 0, errors
+
+def validate_no_policy_with_measurable_target_but_evidence_basis_not_evaluated(df):
+    """Validate that for non-null Policy rows, if 'Measurable target' is 'Yes', 
+    then 'Evidence-informed threshold' is evaluated (not null).
+    
+    Returns: (is_valid, errors_list) where errors_list contains tuples of (row_index, error_description)
+    """
+    required_cols = ['Indicators', 'Measures', 'Policies', 'Policy', 'Measurable target','Evidence-informed threshold']
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+    
+    # Only consider rows where Policy is not NA
+    df_sub = df[df['Policy'].notna()]
+    
+    # Normalise Measurable target values to avoid case/whitespace issues
+    mt = df_sub['Measurable target'].astype(str).str.strip().str.lower()
+    
+    inconsistent_mask = (
+        (mt == 'yes') &
+        df_sub['Evidence-informed threshold'].isna()
+    )
+    
+    inconsistent_rows = df_sub[inconsistent_mask]
+    
+    errors = []
+    for idx, row in inconsistent_rows.iterrows():
+        errors.append((
+            idx,
+            f"Row {idx + 3}: Indicator: {row['Indicators']}, Measure: {row['Measures']}, Policy: {row['Policy']}"
+        ))
+    
+    return len(errors) == 0, errors
 
 
 def get_policy_checklist(xlsx) -> dict:
@@ -721,7 +840,7 @@ def get_policy_checklist(xlsx) -> dict:
             )
             # Exclude policy heading rows
             df = df.loc[~policy_qualifiers]
-        validate_threshold_vs_target(df)
+        validate_policy_checklist(df)
         return df
     except ValueError:
         raise
