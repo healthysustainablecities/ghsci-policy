@@ -360,6 +360,25 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
     }
   };
 
+  const handleDownloadPdf = async (report: ReportsListProps['reports'][number]) => {
+    if (!report?.pdfUrl) return;
+    try {
+      const { url } = await getUrl({ path: report.pdfUrl });
+      const link = document.createElement('a');
+      link.href = url.toString();
+      const meta = parseReportMeta(report);
+      link.download = (meta.city && meta.country)
+        ? `${meta.city}_${meta.country}_policy_report.pdf`
+        : report.fileName.replace('.xlsx', '_policy_report.pdf');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Failed to download pdf:', error);
+      alert('Failed to download the PDF report.');
+    }
+  };
+
   const handleDownloadJson = (jsonString: string, fileName: string) => {
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -633,6 +652,16 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                 >
                   xlsx
                 </div>
+                {report.status === 'COMPLETED' && report.pdfUrl && (
+                  <div
+                    className="status-badge pdf-badge"
+                    onClick={(e) => { e.stopPropagation(); handleDownloadPdf(report); }}
+                    style={{ cursor: 'pointer' }}
+                    title="Download PDF report"
+                  >
+                    pdf
+                  </div>
+                )}
                 <div 
                   className={`status-badge ${getStatusClass(report.status || 'PROCESSING')}`}
                   onClick={(e) => {
