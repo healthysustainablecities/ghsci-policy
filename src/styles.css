@@ -656,16 +656,63 @@ blockquote {
 }
 /* PDF Viewer Modal */
 .pdf-viewer-modal {
-  max-width: 90vw;
-  width: 90%;
-  max-height: 90vh;
+  width: 95vw;
+  max-width: 1100px;
+  height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+}
+
+/* Floating controls overlaid on the PDF iframe */
+.pdf-viewer-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 6px;
+  padding: 4px 8px;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+
+.pdf-close-btn {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  color: #333;
+  border-radius: 4px;
+}
+
+.pdf-close-btn:hover {
+  background: rgba(0,0,0,0.08);
+}
+
+.pdf-new-tab-link {
+  font-size: 13px;
+  color: #6f42c1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.pdf-new-tab-link:hover {
+  text-decoration: underline;
 }
 
 .pdf-viewer-container {
-  margin-top: 20px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  flex: 1;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Update btn-secondary for download button */

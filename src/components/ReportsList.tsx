@@ -156,6 +156,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
+  const [pdfSignedUrl, setPdfSignedUrl] = useState<string | null>(null);
   const [pdfReport, setPdfReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [expandedIndicator, setExpandedIndicator] = useState<string | null>(null);
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
@@ -317,16 +318,27 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
   const handleViewPdf = async (pdfPath: string, report: Schema["PolicyReport"]["type"]) => {
     try {
       const signedUrl = await getUrl({ path: pdfPath });
-      
-      // Fetch the PDF as a blob to avoid download prompt
-      const response = await fetch(signedUrl.url.toString());
+      const urlString = signedUrl.url.toString();
+
+      // On mobile / touch devices, iOS and Android browsers cannot reliably render
+      // PDFs inside an iframe (especially with blob: URLs). Opening the signed S3
+      // URL in a new tab hands off to the native PDF viewer instead.
+      const isMobile =
+        window.matchMedia('(pointer: coarse)').matches ||
+        window.innerWidth <= 768;
+
+      if (isMobile) {
+        window.open(urlString, '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      // Desktop: fetch as blob so the browser renders it inline without a
+      // Content-Disposition: attachment header triggering a download prompt.
+      const response = await fetch(urlString);
       const arrayBuffer = await response.arrayBuffer();
-      
-      // Create a blob with explicit PDF MIME type
       const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
-      
-      // Create a local object URL that can be displayed inline
       const objectUrl = URL.createObjectURL(blob);
+      setPdfSignedUrl(urlString);
       setPdfViewerUrl(objectUrl);
       setPdfReport(report);
     } catch (error) {
@@ -933,31 +945,32 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
       })()}
 
       {pdfViewerUrl && pdfReport && (
-        <div className="modal-overlay">
-          <div className="modal-content pdf-viewer-modal">
-            <div className="modal-header">
-              <button 
+        <div className="modal-overlay" onClick={() => {
+          URL.revokeObjectURL(pdfViewerUrl);
+          setPdfViewerUrl(null);
+          setPdfSignedUrl(null);
+          setPdfReport(null);
+        }}>
+          <div className="modal-content pdf-viewer-modal" onClick={e => e.stopPropagation()}>
+            <div className="pdf-viewer-controls">
+              <button
                 onClick={() => {
                   URL.revokeObjectURL(pdfViewerUrl);
                   setPdfViewerUrl(null);
+                  setPdfSignedUrl(null);
                   setPdfReport(null);
                 }}
-                className="btn btn-close"
+                className="pdf-close-btn"
+                title="Close"
               >
                 🗙
               </button>
-              <h3>PDF Preview - {pdfReport.fileName}</h3>
             </div>
             <div className="pdf-viewer-container">
               <iframe
                 src={pdfViewerUrl}
                 title="PDF Viewer"
-                style={{
-                  width: '100%',
-                  height: '70vh',
-                  border: 'none',
-                  borderRadius: '4px'
-                }}
+                style={{ width: '100%', height: '100%', border: 'none' }}
               />
             </div>
           </div>
