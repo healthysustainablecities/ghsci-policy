@@ -156,7 +156,6 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
-  const [pdfSignedUrl, setPdfSignedUrl] = useState<string | null>(null);
   const [pdfReport, setPdfReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [expandedIndicator, setExpandedIndicator] = useState<string | null>(null);
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
@@ -338,7 +337,6 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
       const arrayBuffer = await response.arrayBuffer();
       const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
       const objectUrl = URL.createObjectURL(blob);
-      setPdfSignedUrl(urlString);
       setPdfViewerUrl(objectUrl);
       setPdfReport(report);
     } catch (error) {
@@ -948,7 +946,6 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
         <div className="modal-overlay" onClick={() => {
           URL.revokeObjectURL(pdfViewerUrl);
           setPdfViewerUrl(null);
-          setPdfSignedUrl(null);
           setPdfReport(null);
         }}>
           <div className="modal-content pdf-viewer-modal" onClick={e => e.stopPropagation()}>
@@ -957,7 +954,6 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                 onClick={() => {
                   URL.revokeObjectURL(pdfViewerUrl);
                   setPdfViewerUrl(null);
-                  setPdfSignedUrl(null);
                   setPdfReport(null);
                 }}
                 className="pdf-close-btn"
