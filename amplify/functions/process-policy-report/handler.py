@@ -10,7 +10,7 @@ import time
 import traceback
 from urllib.parse import unquote_plus
 from datetime import datetime
-from ghsci import generate_online_policy_report, get_policy_setting, policy_data_setup, get_policy_presence_quality_score_dictionary
+from ghsci import generate_online_policy_report, get_policy_setting, policy_data_setup, get_policy_presence_quality_score_dictionary, get_raw_policy_details
 
 s3_client = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
@@ -413,7 +413,7 @@ def update_report_config(file_key, report_config):
                 time.sleep(retry_delay)
                 retry_delay *= 2
 
-def update_policy_data(file_key, policy_data, scores=None, max_retries=5):
+def update_policy_data(file_key, policy_data, scores=None, raw_details=None, max_retries=5):
     """
     Update the policyData field in the database with policy_data_setup() results.
     
@@ -422,6 +422,8 @@ def update_policy_data(file_key, policy_data, scores=None, max_retries=5):
         policy_data: Dictionary from policy_data_setup() to be stored as JSON
         scores: Optional dict from get_policy_presence_quality_score_dictionary(),
                 stored under '_scores' so the UI can use the authoritative values.
+        raw_details: Optional dict from get_raw_policy_details(), mapping measure name ->
+                     list of raw policy entry dicts for frontend drill-down display.
         max_retries: Maximum number of retry attempts
     """
     retry_delay = 1
@@ -432,7 +434,13 @@ def update_policy_data(file_key, policy_data, scores=None, max_retries=5):
     serializable_data = {}
     for topic, df in policy_data.items():
         # df.to_json() returns a JSON string, parse it back to an object for proper nesting
-        serializable_data[topic] = json.loads(df.to_json(orient="index"))
+        topic_data = json.loads(df.to_json(orient="index"))
+        # Attach raw policy entries to each measure for frontend drill-down
+        if raw_details:
+            for measure in topic_data:
+                if measure in raw_details:
+                    topic_data[measure]['policies'] = raw_details[measure]
+        serializable_data[topic] = topic_data
     
     # Embed authoritative presence/quality scores so the UI doesn't need to recompute them
     if scores is not None:
@@ -577,8 +585,9 @@ def process_report(bucket, key, report_config=None):
         print("Extracting policy data using policy_data_setup()...")
         policy_data = policy_data_setup(checklist_file_path)
         policy_scores = get_policy_presence_quality_score_dictionary(checklist_file_path)
+        policy_raw_details = get_raw_policy_details(checklist_file_path)
         if policy_data:
-            update_policy_data(key, policy_data, scores=policy_scores)
+            update_policy_data(key, policy_data, scores=policy_scores, raw_details=policy_raw_details)
             print("Policy data extracted and saved successfully")
         else:
             print("Warning: policy_data_setup returned None")

@@ -1378,6 +1378,117 @@ blockquote {
   color: #aaa;
 }
 
+/* ── Measure hover / detail expansion ───────────────────────────────────── */
+
+.measure-row-expandable {
+  cursor: pointer;
+}
+
+.measure-row-expandable:hover td {
+  background: #f0ecfa;
+}
+
+.col-measure-clickable {
+  text-decoration: underline dotted #9f7fe8;
+  text-underline-offset: 3px;
+}
+
+.measure-detail-hint {
+  font-size: 11px;
+  color: #9f7fe8;
+  margin-left: 5px;
+  vertical-align: middle;
+  user-select: none;
+}
+
+.measure-detail-row td {
+  background: #faf8ff !important;
+  border-top: none;
+  padding: 10px 14px 14px 20px;
+}
+
+.policy-entry {
+  border: 1px solid #e0d8f5;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: #fff;
+}
+
+.policy-entry:last-child {
+  margin-bottom: 0;
+}
+
+.policy-entry-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.policy-field {
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+
+.policy-field:last-child {
+  margin-bottom: 0;
+}
+
+.policy-field-label {
+  color: #6f42c1;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.policy-field-value {
+  color: #333;
+}
+
+/* ── Measure tooltip ─────────────────────────────────────────────────────── */
+
+.measure-tooltip {
+  position: fixed;
+  z-index: 2000;
+  background: rgba(30, 20, 50, 0.92);
+  color: #fff;
+  border-radius: 6px;
+  padding: 9px 12px;
+  max-width: 300px;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.measure-tooltip-policy {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.measure-tooltip-more {
+  font-style: italic;
+  color: #c9b8f5;
+  font-size: 11px;
+}
+
+.measure-tooltip-text {
+  color: #ddd;
+  margin-top: 5px;
+  font-size: 11px;
+}
+
+.measure-tooltip-hint {
+  margin-top: 6px;
+  color: #b49de8;
+  font-size: 11px;
+  font-style: italic;
+}
+
 /* ── Feedback FAB ────────────────────────────────────────────────────────── */
 
 .feedback-fab {

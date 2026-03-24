@@ -42,9 +42,30 @@ const sanitizeUserId = (userId: string): string => {
 
 // ── Data helpers ─────────────────────────────────────────────────────────────
 
+interface PolicyEntry {
+  policy?: string;
+  level_of_government?: string;
+  adoption_date?: string;
+  citation?: string;
+  text?: string;
+  mandatory?: string;
+  measurable_target?: string;
+  measurable_target_text?: string;
+  evidence_informed_threshold?: string;
+  threshold_explanation?: string;
+  notes?: string;
+}
+
+interface MeasureVals {
+  identified: string;
+  aligns: string;
+  measurable: string;
+  policies?: PolicyEntry[];
+}
+
 const parsePolicyData = (
   report: Schema["PolicyReport"]["type"]
-): Record<string, Record<string, { identified: string; aligns: string; measurable: string }>> | null => {
+): Record<string, Record<string, MeasureVals>> | null => {
   if (!report.policyData) return null;
   try {
     let data: any = report.policyData;
@@ -158,6 +179,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
   const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
   const [pdfReport, setPdfReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [expandedIndicator, setExpandedIndicator] = useState<string | null>(null);
+  const [expandedMeasure, setExpandedMeasure] = useState<string | null>(null);
+  const [hoveredMeasure, setHoveredMeasure] = useState<{ measure: string; policies: PolicyEntry[]; x: number; y: number } | null>(null);
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
   const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<'uploadDate' | 'completedDate' | 'cityCountry' | 'countryCity' | 'author'>('uploadDate');
@@ -172,6 +195,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
   useEffect(() => {
     if (selectedReport) {
       setExpandedIndicator(null);
+      setExpandedMeasure(null);
+      setHoveredMeasure(null);
     }
   }, [selectedReport?.id]);
 
@@ -862,14 +887,14 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
 
             {/* Checklist tables */}
             {policyData && (
-              <div className="checklist-section" translate="no">
+              <div className="checklist-section" translate="no" onMouseLeave={() => setHoveredMeasure(null)}>
                 {Object.entries(policyData).filter(([k]) => !k.startsWith('_')).map(([indicator, measures]) => {
                   const isOpen = expandedIndicator === indicator;
                   return (
                     <div key={indicator} className="checklist-indicator">
                       <h4
                         className={`checklist-indicator-title checklist-indicator-toggle${isOpen ? ' is-open' : ''}`}
-                        onClick={() => setExpandedIndicator(isOpen ? null : indicator)}
+                        onClick={() => { setExpandedIndicator(isOpen ? null : indicator); setExpandedMeasure(null); setHoveredMeasure(null); }}
                       >
                         {indicator}
                         <span className="accordion-chevron">{isOpen ? '▲' : '▼'}</span>
@@ -885,20 +910,92 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                             </tr>
                           </thead>
                           <tbody>
-                            {Object.entries(measures).map(([measure, vals]: [string, any]) => (
-                              <tr key={measure}>
-                                <td className="col-measure">{measure}</td>
-                                <td className={`col-score ${cellClass(vals.identified)}`}>{vals.identified}</td>
-                                <td className={`col-score ${cellClass(vals.aligns)}`}>{vals.aligns}</td>
-                                <td className={`col-score ${cellClass(vals.measurable)}`}>{vals.measurable}</td>
-                              </tr>
-                            ))}
+                            {Object.entries(measures).map(([measure, vals]) => {
+                              const typedVals = vals as MeasureVals;
+                              const policies = typedVals.policies;
+                              const hasDetail = policies && policies.length > 0;
+                              const measureKey = `${indicator}::${measure}`;
+                              const isExpanded = expandedMeasure === measureKey;
+                              return (
+                                <React.Fragment key={measure}>
+                                  <tr
+                                    className={hasDetail ? 'measure-row-expandable' : ''}
+                                    onClick={hasDetail ? () => { setExpandedMeasure(isExpanded ? null : measureKey); setHoveredMeasure(null); } : undefined}
+                                    onMouseEnter={hasDetail ? (e) => setHoveredMeasure({ measure, policies: policies!, x: e.clientX, y: e.clientY }) : undefined}
+                                    onMouseLeave={hasDetail ? () => setHoveredMeasure(null) : undefined}
+                                    onMouseMove={hasDetail ? (e) => setHoveredMeasure(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null) : undefined}
+                                  >
+                                    <td className={`col-measure${hasDetail ? ' col-measure-clickable' : ''}`}>
+                                      {measure}
+                                      {hasDetail && <span className="measure-detail-hint">ⓘ</span>}
+                                    </td>
+                                    <td className={`col-score ${cellClass(typedVals.identified)}`}>{typedVals.identified}</td>
+                                    <td className={`col-score ${cellClass(typedVals.aligns)}`}>{typedVals.aligns}</td>
+                                    <td className={`col-score ${cellClass(typedVals.measurable)}`}>{typedVals.measurable}</td>
+                                  </tr>
+                                  {isExpanded && policies && (
+                                    <tr className="measure-detail-row">
+                                      <td colSpan={4}>
+                                        {policies.map((entry, i) => (
+                                          <div key={i} className="policy-entry">
+                                            {entry.policy && <div className="policy-entry-name">{entry.policy}</div>}
+                                            {([
+                                              ['Level of government', entry.level_of_government],
+                                              ['Adoption date', entry.adoption_date],
+                                              ['Citation', entry.citation],
+                                              ['Text', entry.text],
+                                              ['Mandatory', entry.mandatory],
+                                              ['Measurable target', entry.measurable_target],
+                                              ['Measurable target text', entry.measurable_target_text],
+                                              ['Evidence-informed threshold', entry.evidence_informed_threshold],
+                                              ['Threshold explanation', entry.threshold_explanation],
+                                              ['Notes', entry.notes],
+                                            ] as [string, string | undefined][]).filter(([, v]) => v).map(([label, value]) => (
+                                              <div key={label} className="policy-field">
+                                                <span className="policy-field-label">{label}:</span>
+                                                <span className="policy-field-value">{value}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ))}
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
                           </tbody>
                         </table>
                       )}
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Floating tooltip for measure hover */}
+            {hoveredMeasure && (
+              <div
+                className="measure-tooltip"
+                style={{ left: hoveredMeasure.x + 14, top: hoveredMeasure.y - 8 }}
+                onMouseEnter={() => setHoveredMeasure(null)}
+              >
+                <div className="measure-tooltip-policies">
+                  {hoveredMeasure.policies.slice(0, 2).map((p, i) => (
+                    <div key={i} className="measure-tooltip-policy">{p.policy}</div>
+                  ))}
+                  {hoveredMeasure.policies.length > 2 && (
+                    <div className="measure-tooltip-more">+{hoveredMeasure.policies.length - 2} more…</div>
+                  )}
+                </div>
+                {hoveredMeasure.policies[0]?.text && (
+                  <div className="measure-tooltip-text">
+                    {hoveredMeasure.policies[0].text.length > 120
+                      ? hoveredMeasure.policies[0].text.substring(0, 120) + '…'
+                      : hoveredMeasure.policies[0].text}
+                  </div>
+                )}
+                <div className="measure-tooltip-hint">Click for details</div>
               </div>
             )}
 

@@ -956,7 +956,51 @@ def get_policy_checklist_legacy(xlsx) -> dict:
             f'  Error reading policy checklist; please ensure these have been completed.  Specific error: {e}',
         )
         return None
-    
+
+
+def get_raw_policy_details(xlsx) -> dict:
+    """Extract raw policy entries from the checklist for frontend display.
+
+    Returns a dict mapping measure name -> list of policy entry dicts.
+    Each entry contains non-empty values for the policy detail fields
+    (policy, level_of_government, adoption_date, citation, text, mandatory,
+    measurable_target, measurable_target_text, evidence_informed_threshold,
+    threshold_explanation, notes).
+    Only rows where Policy is a real entry (not empty/null) are included.
+    """
+    audit = get_policy_checklist(xlsx)
+    if audit is None:
+        return {}
+
+    detail_cols = [
+        'Policy', 'Level of government', 'Adoption date', 'Citation', 'Text',
+        'Mandatory', 'Measurable target', 'Measurable target text',
+        'Evidence-informed threshold', 'Threshold explanation', 'Notes',
+    ]
+    available_cols = [c for c in detail_cols if c in audit.columns]
+
+    # Only keep rows where Policy is a real entry (not empty/null/No)
+    policy_rows = audit[
+        ~audit['Policy'].astype(str).isin(['No', '', 'nan', 'NaN'])
+    ]
+
+    result = {}
+    for measure, group in policy_rows.groupby('Measures', sort=False):
+        entries = []
+        for _, row in group.iterrows():
+            entry = {}
+            for col in available_cols:
+                val = row.get(col)
+                if pd.notna(val) and str(val).strip() not in ['', 'nan', 'NaN']:
+                    key = col.lower().replace(' ', '_').replace('-', '_')
+                    entry[key] = str(val).strip()
+            if entry:
+                entries.append(entry)
+        if entries:
+            result[measure] = entries
+
+    return result
+
 
 def get_policy_setting(xlsx) -> dict:
     """Get and format policy checklist from Excel into series of DataFrames organised by indicator and measure in a dictionary."""
