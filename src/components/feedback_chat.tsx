@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuthenticator } from '@aws-amplify/ui-react';
+import { fetchUserAttributes } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../amplify/data/resource';
 
@@ -10,8 +11,15 @@ const FeedbackChat: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [comment, setComment] = useState('');
   const [category, setCategory] = useState<'Bug' | 'Feature' | 'General'>('General');
+  const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    fetchUserAttributes()
+      .then(attrs => setName(attrs.name ?? ''))
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = async () => {
     if (!comment.trim()) return;
@@ -21,8 +29,8 @@ const FeedbackChat: React.FC = () => {
         comment: comment.trim(),
         email: user?.signInDetails?.loginId ?? undefined,
         datetime: new Date().toISOString(),
-        url: window.location.href,
         category,
+        name: name.trim() || undefined,
       });
       setComment('');
       setCategory('General');
@@ -92,8 +100,21 @@ const FeedbackChat: React.FC = () => {
                   />
                 </div>
 
+                <div className="modal-row">
+                  <label className="feedback-label" htmlFor="feedback-name">Your name <span style={{ fontWeight: 400, color: '#888' }}>(optional — clear to submit anonymously)</span></label>
+                  <input
+                    id="feedback-name"
+                    className="feedback-select"
+                    type="text"
+                    placeholder="Anonymous"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    style={{ fontFamily: 'inherit' }}
+                  />
+                </div>
+
                 <p style={{ fontSize: 12, color: '#888', margin: '4px 0 16px' }}>
-                  Along with your comment we'll record the date, time, URL of the current page, and your account email.
+                  Along with your comment we'll record the date, time, and your account email.
                 </p>
 
                 <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

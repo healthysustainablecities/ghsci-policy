@@ -49,6 +49,11 @@ const schema = a.schema({
       url: a.string(),
       category: a.enum(['Bug', 'Feature', 'General']),
       resolved: a.boolean(),
+      status: a.enum(['resolved', 'planned', 'not_planned']),
+      devComment: a.string(),
+      devCommentAuthor: a.string(),
+      devCommentAt: a.datetime(),
+      name: a.string(),
     })
     .authorization((allow) => [
       allow.authenticated().to(['create', 'read']),
