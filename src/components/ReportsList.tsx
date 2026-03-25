@@ -5,11 +5,13 @@ import { uploadData } from 'aws-amplify/storage';
 import type { Schema } from '../../amplify/data/resource';
 import { ReportSettings, type ReportConfig } from './ReportSettings';
 import { PolicyChat } from './PolicyChat';
+import { PolicyFormWizard, type FormData as PolicyFormData } from './PolicyFormWizard';
 
 interface ReportsListProps {
   onUploadComplete: (fileName: string, fileSize: number, fileKey: string) => void;
   onDeleteReport: (report: Schema["PolicyReport"]["type"]) => void;
   onProcessReport: (report: Schema["PolicyReport"]["type"]) => Promise<void>;
+  onFormSubmit: (formData: PolicyFormData) => Promise<void>;
   client: ReturnType<typeof generateClient<Schema>> | null;
   reports: Array<Schema["PolicyReport"]["type"]>;
   user: any;
@@ -21,6 +23,7 @@ const getStatusClass = (status: string) => {
     case 'PROCESSING': return 'status-processing';
     case 'COMPLETED': return 'status-completed';
     case 'FAILED': return 'status-failed';
+    case 'INCOMPLETE': return 'status-incomplete';
     default: return 'status-default';
   }
 };
@@ -31,6 +34,7 @@ const getStatusText = (status: string) => {
     case 'PROCESSING': return 'Processing...';
     case 'COMPLETED': return 'Completed';
     case 'FAILED': return 'Failed';
+    case 'INCOMPLETE': return 'Incomplete';
     default: return 'Unknown';
   }
 };
@@ -84,6 +88,16 @@ const parseReportMeta = (
   try {
     let cfg: any = report.reportConfig;
     while (typeof cfg === 'string') cfg = JSON.parse(cfg);
+    // Incomplete form data stored under _incompleteFormData key
+    const inc = cfg?._incompleteFormData?.collectionDetails;
+    if (inc) {
+      return {
+        city: inc.city || null,
+        country: inc.country || null,
+        reviewer: inc.person || null,
+        year: inc.date || null,
+      };
+    }
     const lang = cfg?.reporting?.languages?.English;
     return {
       city: cfg?.city || lang?.name || null,
@@ -94,6 +108,32 @@ const parseReportMeta = (
   } catch {
     return empty;
   }
+};
+
+const getIncompleteFormData = (
+  report: Schema["PolicyReport"]["type"]
+): PolicyFormData | undefined => {
+  if (!report.reportConfig) return undefined;
+  try {
+    let cfg: any = report.reportConfig;
+    while (typeof cfg === 'string') cfg = JSON.parse(cfg);
+    return cfg?._incompleteFormData ?? undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+// Derive a virtual "INCOMPLETE" status from the _incomplete flag in reportConfig,
+// since the enum may not be deployed yet in the backend.
+const getEffectiveStatus = (report: Schema["PolicyReport"]["type"]): string => {
+  try {
+    let cfg: any = report.reportConfig;
+    if (cfg) {
+      while (typeof cfg === 'string') cfg = JSON.parse(cfg);
+      if (cfg?._incomplete === true) return 'INCOMPLETE';
+    }
+  } catch {}
+  return report.status || 'PROCESSING';
 };
 
 const extractImageS3Key = (
@@ -169,7 +209,7 @@ const cellClass = (v: string) => {
   return 'cell-dash';
 };
 
-export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDeleteReport, onProcessReport, reports, user }) => {
+export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDeleteReport, onProcessReport, onFormSubmit, reports, user }) => {
   const [selectedReport, setSelectedReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [settingsReport, setSettingsReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [policyDataReport, setPolicyDataReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
@@ -185,6 +225,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
   const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<'uploadDate' | 'completedDate' | 'cityCountry' | 'countryCity' | 'author'>('uploadDate');
   const [showStatusInfo, setShowStatusInfo] = useState(false);
+  const [showFormWizard, setShowFormWizard] = useState(false);
+  const [editingIncomplete, setEditingIncomplete] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const fetchedS3KeysRef = useRef<Set<string>>(new Set());
   const client = generateClient<Schema>();
 
@@ -625,21 +667,31 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
 
       <div className="reports-grid">
         {/* Upload area as first item */}
-        <div
-          className={`upload-card ${isDragging ? 'dragging' : ''}`}
-          onDrop={handleDrop}
-          onDragOver={(e) => e.preventDefault()}
-          onDragEnter={() => setIsDragging(true)}
-          onDragLeave={() => setIsDragging(false)}
-          onClick={() => document.getElementById('file-input-grid')?.click()}
-        >
-          <div className="upload-thumbnail">
+        <div className="upload-card-split">
+          {/* Upper half — open the form wizard */}
+          <div
+            className="upload-card-half upload-card-form"
+            onClick={() => setShowFormWizard(true)}
+          >
+            <div>📋<br/>Complete a new policy audit</div>
+          </div>
+
+          {/* Lower half — xlsx upload with drag-and-drop */}
+          <div
+            className={`upload-card-half upload-card-xlsx${isDragging ? ' dragging' : ''}`}
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
+            onDragEnter={() => setIsDragging(true)}
+            onDragLeave={() => setIsDragging(false)}
+            onClick={() => document.getElementById('file-input-grid')?.click()}
+          >
             {isUploading ? (
               <div>⏳<br/>Uploading...</div>
             ) : (
               <div>📁<br/>Upload 1000 Cities Challenge policy checklist xlsx file(s)</div>
             )}
           </div>
+
           <input
             type="file"
             accept=".xlsx"
@@ -650,11 +702,58 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
           />
         </div>
 
+        {showFormWizard && (
+          <PolicyFormWizard
+            initialData={editingIncomplete ? getIncompleteFormData(editingIncomplete) : undefined}
+            onClose={async (formData) => {
+              setShowFormWizard(false);
+              const city = formData.collectionDetails?.city?.trim();
+              const country = formData.collectionDetails?.country?.trim();
+              if (!city || !country) { setEditingIncomplete(null); return; }
+              const reportConfig = JSON.stringify({ _incomplete: true, _incompleteFormData: formData });
+              const fileName = `Policy audit - ${formData.collectionDetails.city} (incomplete)`;
+              try {
+                if (editingIncomplete) {
+                  await client.models.PolicyReport.update({
+                    id: editingIncomplete.id,
+                    reportConfig,
+                    fileName,
+                    fileSize: JSON.stringify(formData).length,
+                  });
+                } else {
+                  const username = (user?.username || 'unknown').replace(/[^a-zA-Z0-9-]/g, '').substring(0, 50);
+                  const syntheticKey = `public/${username}/incomplete-${Date.now()}.json`;
+                  await client.models.PolicyReport.create({
+                    fileName,
+                    fileKey: syntheticKey,
+                    status: 'UPLOADED',
+                    fileSize: JSON.stringify(formData).length,
+                    uploadedAt: new Date().toISOString(),
+                    reportConfig,
+                  });
+                }
+              } catch (err) {
+                console.error('Failed to save incomplete form:', err);
+              }
+              setEditingIncomplete(null);
+            }}
+            onSubmit={async (formData) => {
+              await onFormSubmit(formData);
+              if (editingIncomplete) {
+                try { await client.models.PolicyReport.delete({ id: editingIncomplete.id }); } catch {}
+                setEditingIncomplete(null);
+              }
+              setShowFormWizard(false);
+            }}
+          />
+        )}
+
         {/* Existing reports */}
         {sortedReports.map((report) => {
           const meta = parseReportMeta(report);
           const policyData = parsePolicyData(report);
           const scores = computeScores(policyData);
+          const effectiveStatus = getEffectiveStatus(report);
           const titleLine = (meta.city && meta.country)
             ? `${meta.city}, ${meta.country}`
             : meta.city || meta.country || report.fileName;
@@ -679,15 +778,17 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                 title="Select for deletion"
               />
               <span>
-                <div
-                  className="status-badge xlsx-badge"
-                  onClick={(e) => { e.stopPropagation(); handleDownloadXlsx(report); }}
-                  style={{ cursor: 'pointer' }}
-                  title="Download policy checklist .xlsx file"
-                >
-                  xlsx
-                </div>
-                {report.status === 'COMPLETED' && report.pdfUrl && (
+                {effectiveStatus !== 'INCOMPLETE' && (
+                  <div
+                    className="status-badge xlsx-badge"
+                    onClick={(e) => { e.stopPropagation(); handleDownloadXlsx(report); }}
+                    style={{ cursor: 'pointer' }}
+                    title="Download policy checklist .xlsx file"
+                  >
+                    xlsx
+                  </div>
+                )}
+                {effectiveStatus === 'COMPLETED' && report.pdfUrl && (
                   <div
                     className="status-badge pdf-badge"
                     onClick={(e) => { e.stopPropagation(); handleDownloadPdf(report); }}
@@ -698,7 +799,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                   </div>
                 )}
                 <div 
-                  className={`status-badge ${getStatusClass(report.status || 'PROCESSING')}`}
+                  className={`status-badge ${getStatusClass(effectiveStatus)}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowStatusInfo(true);
@@ -706,7 +807,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                   style={{ cursor: 'pointer' }}
                   title="Click for status info"
                 >
-                  {getStatusText(report.status || 'PROCESSING')}
+                  {getStatusText(effectiveStatus)}
                 </div>
               </span>
             </div>
@@ -714,7 +815,14 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             {/* Clickable thumbnail/scorecard */}
             <div
               className="report-thumbnail"
-              onClick={() => openReport(report)}
+              onClick={() => {
+                if (effectiveStatus === 'INCOMPLETE') {
+                  setEditingIncomplete(report);
+                  setShowFormWizard(true);
+                } else {
+                  openReport(report);
+                }
+              }}
               style={bgUrl ? {
                 backgroundImage: `linear-gradient(rgba(255,255,255,0.6), rgba(255,255,255,0.9)), url("${bgUrl}")`,
                 backgroundSize: 'cover',
@@ -723,7 +831,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             >
               {/* Centre content */}
               <div className="thumbnail-center">
-                {report.status === 'COMPLETED' && scores ? (
+                {effectiveStatus === 'COMPLETED' && scores ? (
                   <div className="report-scores">
                     <div className="score-row">
                       <span className="score-label">Policy presence</span>
@@ -738,7 +846,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                       <span className="score-detail">{scores.quality.numerator.toFixed(1)}/{scores.quality.denominator}</span>
                     </div>
                   </div>
-                ) : report.status === 'FAILED' ? (
+                ) : effectiveStatus === 'FAILED' ? (
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: 32 }}>⚠️</div>
                     {report.errorMessage && (
@@ -747,13 +855,27 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                       </div>
                     )}
                   </div>
+                ) : effectiveStatus === 'INCOMPLETE' ? (
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 32 }}>✏️</div>
+                    <div style={{ fontSize: 13, color: '#666', marginTop: 4 }}>Click to continue editing</div>
+                  </div>
                 ) : (
                   <div style={{ fontSize: 32 }}>⏳</div>
                 )}
               </div>
 
               {/* Action buttons – centred at bottom */}
-              {(report.status === 'UPLOADED' || report.status === 'FAILED' || report.status === 'COMPLETED') && (
+              {effectiveStatus === 'INCOMPLETE' && (
+                <div className="action-buttons-bar">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setEditingIncomplete(report); setShowFormWizard(true); }}
+                    className="btn-icon"
+                    title="Continue editing"
+                  >✏️ Continue</button>
+                </div>
+              )}
+              {(effectiveStatus === 'UPLOADED' || effectiveStatus === 'FAILED' || effectiveStatus === 'COMPLETED') && (
                 <div className="action-buttons-bar">
                   <button
                     onClick={async (e) => {
@@ -764,7 +886,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                     className="btn-icon"
                     title="Report settings"
                   >⚙️</button>
-                  {report.status !== 'COMPLETED' ? (
+                  {effectiveStatus !== 'COMPLETED' ? (
                     <button
                       onClick={(e) => { e.stopPropagation(); onProcessReport(report); }}
                       className="btn-icon"
@@ -782,7 +904,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                       title="Regenerate report"
                     >🔄</button>
                   )}
-                  {report.status === 'COMPLETED' && report.pdfUrl && (
+                  {effectiveStatus === 'COMPLETED' && report.pdfUrl && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleViewPdf(report.pdfUrl!, report); }}
                       className="btn-icon"
@@ -803,7 +925,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
               <div className="report-card-date">
                 {formatDateYYYYMMDD(report.uploadedAt)}
               </div>
-              {report.status === 'FAILED' && report.errorMessage && (
+              {effectiveStatus === 'FAILED' && report.errorMessage && (
                 <p className="error-summary" title={report.errorMessage}>
                   {report.errorMessage.length > 60
                     ? report.errorMessage.substring(0, 60) + '...'

@@ -10,7 +10,7 @@ import time
 import traceback
 from urllib.parse import unquote_plus
 from datetime import datetime
-from ghsci import generate_online_policy_report, get_policy_setting, policy_data_setup, get_policy_presence_quality_score_dictionary, get_raw_policy_details
+from ghsci import generate_online_policy_report, get_policy_setting, policy_data_setup, get_policy_presence_quality_score_dictionary, get_raw_policy_details, fill_xlsx_from_form_data
 
 s3_client = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
@@ -115,9 +115,34 @@ def parse_excel_config(excel_file_path):
 
 def handler(event, context):
     """
-    Lambda function to process policy report uploads
+    Lambda function to process policy report uploads.
+    Also handles form submissions when 'formData' is present in the event.
     """
     print(f"Processing event: {json.dumps(event, indent=2)}")
+
+    # Form submission path: formData passed directly (no S3 file yet)
+    if 'formData' in event:
+        form_data = event['formData']
+        bucket = event.get('bucket', os.environ.get('STORAGE_BUCKET', ''))
+        synthetic_key = event.get('syntheticKey', '')
+        report_config = event.get('reportConfig', None)
+        if report_config and isinstance(report_config, str):
+            try:
+                report_config = json.loads(report_config)
+            except json.JSONDecodeError:
+                report_config = None
+        try:
+            process_form_submission(bucket, form_data, synthetic_key, report_config)
+            return {'statusCode': 200, 'body': json.dumps({'message': 'Form processed successfully'})}
+        except Exception as e:
+            error_message = f"{type(e).__name__}: {str(e)}"
+            print(f'Form processing error: {error_message}')
+            traceback.print_exc()
+            try:
+                update_report_status(synthetic_key, 'FAILED', error_message=error_message[:4000])
+            except Exception:
+                pass
+            return {'statusCode': 500, 'body': json.dumps({'error': error_message})}
 
     try:
         # Support both direct S3 trigger format and EventBridge S3 event notification format
@@ -629,3 +654,60 @@ def process_report(bucket, key, report_config=None):
         print(f"File {key} processed successfully")
     except Exception as e:
         raise RuntimeError(f"Failed to update status to COMPLETED: {str(e)}")
+
+
+def process_form_submission(bucket, form_data, synthetic_key, report_config=None):
+    """
+    Handle an online form submission by:
+    1. Checking if the DynamoDB record is already COMPLETED/PROCESSING (EventBridge duplicate guard)
+    2. Downloading the blank template xlsx from S3
+    3. Filling it with form data via fill_xlsx_from_form_data()
+    4. Uploading the filled xlsx to S3 at the synthetic_key location
+    5. Calling process_report() to run the unchanged evaluation + PDF pipeline
+    """
+    print(f"process_form_submission called with synthetic_key={synthetic_key}")
+
+    # Duplicate-trigger guard: EventBridge fires when the filled xlsx is uploaded.
+    # If our record is already PROCESSING or COMPLETED, the EventBridge invocation
+    # should be a no-op (the main invocation already handled it).
+    try:
+        table = get_table()
+        response = table.scan(
+            FilterExpression='fileKey = :fk',
+            ExpressionAttributeValues={':fk': synthetic_key}
+        )
+        items = response.get('Items', [])
+        if items:
+            status = items[0].get('status', '')
+            if status in ('COMPLETED', 'PROCESSING'):
+                print(f"Duplicate trigger detected: record {synthetic_key} already has status={status}. Skipping.")
+                return
+    except Exception as e:
+        print(f"Warning: Could not check for duplicate trigger: {e}")
+
+    # Download blank template from S3
+    template_key = 'public/gohsc-policy-indicator-checklist.xlsx'
+    template_local = '/tmp/template-checklist.xlsx'
+    try:
+        print(f"Downloading template from s3://{bucket}/{template_key}")
+        s3_client.download_file(bucket, template_key, template_local)
+    except Exception as e:
+        raise RuntimeError(f"Failed to download template xlsx from S3 (key={template_key}): {e}")
+
+    # Fill template with form data
+    filled_local = '/tmp/filled-checklist.xlsx'
+    try:
+        fill_xlsx_from_form_data(form_data, template_local, filled_local)
+    except Exception as e:
+        raise RuntimeError(f"Failed to fill xlsx from form data: {e}")
+
+    # Upload filled xlsx to S3 at the synthetic key
+    try:
+        print(f"Uploading filled xlsx to s3://{bucket}/{synthetic_key}")
+        s3_client.upload_file(filled_local, bucket, synthetic_key)
+        print("Filled xlsx uploaded successfully")
+    except Exception as e:
+        raise RuntimeError(f"Failed to upload filled xlsx to S3: {e}")
+
+    # Run the normal processing pipeline (parses filled xlsx, generates PDF, updates DB)
+    process_report(bucket, synthetic_key, report_config)

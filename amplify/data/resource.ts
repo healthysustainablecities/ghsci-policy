@@ -12,7 +12,7 @@ const schema = a.schema({
     .model({
       fileName: a.string().required(),
       fileKey: a.string(), // S3 key for uploaded file
-      status: a.enum(['UPLOADED', 'PROCESSING', 'COMPLETED', 'FAILED']),
+      status: a.enum(['UPLOADED', 'PROCESSING', 'COMPLETED', 'FAILED', 'INCOMPLETE']),
       pdfUrl: a.string(),
       reportTitle: a.string(),
       collectionDetails: a.string(),
@@ -36,6 +36,18 @@ const schema = a.schema({
       fileKey: a.string().required(),
       reportConfig: a.json(),
       bucket: a.string().required(),
+    })
+    .returns(a.json())
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(triggerProcessing)),
+
+  submitPolicyForm: a
+    .mutation()
+    .arguments({
+      formData: a.json().required(),
+      bucket: a.string().required(),
+      syntheticKey: a.string().required(),
+      reportConfig: a.json(),
     })
     .returns(a.json())
     .authorization((allow) => [allow.authenticated()])

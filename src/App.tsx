@@ -6,6 +6,7 @@ import type { Schema } from '../amplify/data/resource';
 import { ReportsList } from './components/ReportsList';
 import FeedbackChat from './components/feedback_chat';
 import FeedbackGallery from './components/feedback_gallery';
+import type { FormData as PolicyFormData } from './components/PolicyFormWizard';
 import outputs from '../amplify_outputs.json';
 import './styles.css';
 
@@ -338,6 +339,39 @@ function App() {
     }
   };
 
+  const handleFormSubmit = async (formData: PolicyFormData) => {
+    try {
+      const city = formData.collectionDetails?.city || 'City';
+      const timestamp = Date.now();
+      const username = (user?.username || 'unknown').replace(/[^a-zA-Z0-9-]/g, '').substring(0, 50);
+      const syntheticKey = `public/${username}/form-${timestamp}.xlsx`;
+      const fileName = `Policy audit - ${city} (${new Date().getFullYear()}).xlsx`;
+      const bucketName = outputs.storage?.bucket_name;
+
+      if (!bucketName) throw new Error('Storage bucket name not found in configuration');
+
+      await client.models.PolicyReport.create({
+        fileName,
+        fileKey: syntheticKey,
+        status: 'PROCESSING',
+        fileSize: JSON.stringify(formData).length,
+        uploadedAt: new Date().toISOString(),
+      });
+
+      const result = await (client.mutations as any).submitPolicyForm({
+        formData: JSON.stringify(formData),
+        bucket: bucketName,
+        syntheticKey,
+      });
+
+      console.log('Form submitted:', result);
+      alert('Policy audit submitted. Processing will begin shortly.');
+    } catch (error) {
+      console.error('Failed to submit policy form:', error);
+      alert(`Failed to submit: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   return (
     <main className="main-container">
       <header className="header">
@@ -425,6 +459,7 @@ function App() {
           onUploadComplete={handleUploadComplete}
           onDeleteReport={handleDeleteReport}
           onProcessReport={handleProcessReport}
+          onFormSubmit={handleFormSubmit}
           client={client}
           reports={reports}
           user={user}

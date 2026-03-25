@@ -958,6 +958,253 @@ def get_policy_checklist_legacy(xlsx) -> dict:
         return None
 
 
+def fill_xlsx_from_form_data(form_data: dict, template_path: str, output_path: str):
+    """Fill a blank policy checklist xlsx template with data from the online form.
+
+    Args:
+        form_data: dict with keys:
+            'collectionDetails': { person, email, date, city, region, country,
+                                   levelsOfGovernment (str), disasters (dict str->bool),
+                                   disasterOther (str), cityContext (str), demographics (str) }
+            'policies': { measureName: {
+                'principles': [ { 'principle': str, 'isOther': bool,
+                                  'qualifier': 'Yes'|'No',
+                                  'entries': [ { policy, levelOfGovernment,
+                                    adoptionDate, citation, text, mandatory,
+                                    measurableTarget, measurableTargetText,
+                                    evidenceInformedThreshold, thresholdExplanation,
+                                    notes } ] } ],
+                'entries': [ ... ]  # flat list for measures with no Yes/No headings
+            } }
+        template_path: local path to the blank template xlsx
+        output_path: local path to write the filled xlsx
+    """
+    import openpyxl
+
+    wb = openpyxl.load_workbook(template_path)
+
+    # ---------------------------------------------------------------
+    # 1. Fill "Collection details" sheet
+    # Values go in column C (col index 3, 1-based)
+    # ---------------------------------------------------------------
+    cd = form_data.get('collectionDetails', {})
+    ws_cd = wb['Collection details']
+
+    # Row mapping: (row number, value)
+    # Template rows (1-based):
+    #   5  Name of person(s)
+    #   6  Email address(es)
+    #   7  Date completed
+    #   8  City
+    #   9  State/province/county/region
+    #  10  Country
+    #  11  Governments included in policy checklist
+    #  15  Severe storms
+    #  16  Floods
+    #  17  Bushfires/wildfires
+    #  18  Heatwaves
+    #  19  Extreme cold
+    #  20  Typhoons
+    #  21  Hurricanes
+    #  22  Cyclones
+    #  23  Earthquakes
+    #  24  Other (please specify)
+    #  27  City context
+    #  28  Demographics and health equity
+
+    VALUE_COL = 3  # Column C (1-based)
+
+    ws_cd.cell(row=5, column=VALUE_COL).value = cd.get('person', '')
+    ws_cd.cell(row=6, column=VALUE_COL).value = cd.get('email', '')
+    # Date: store the year string as an integer if possible so it reads as a date
+    date_val = cd.get('date', '')
+    try:
+        ws_cd.cell(row=7, column=VALUE_COL).value = int(date_val) if date_val else ''
+    except (ValueError, TypeError):
+        ws_cd.cell(row=7, column=VALUE_COL).value = date_val
+    ws_cd.cell(row=8, column=VALUE_COL).value = cd.get('city', '')
+    ws_cd.cell(row=9, column=VALUE_COL).value = cd.get('region', '')
+    ws_cd.cell(row=10, column=VALUE_COL).value = cd.get('country', '')
+    ws_cd.cell(row=11, column=VALUE_COL).value = (
+        ', '.join(cd['levelsOfGovernment'])
+        if isinstance(cd.get('levelsOfGovernment'), list)
+        else cd.get('levelsOfGovernment', '')
+    )
+
+    # Disaster context checkboxes
+    disasters_map = {
+        'severeStorms': 15,
+        'floods': 16,
+        'bushfiresWildfires': 17,
+        'heatwaves': 18,
+        'extremeCold': 19,
+        'typhoons': 20,
+        'hurricanes': 21,
+        'cyclones': 22,
+        'earthquakes': 23,
+    }
+    disasters = cd.get('disasters', {})
+    for field, row in disasters_map.items():
+        ws_cd.cell(row=row, column=VALUE_COL).value = 'Yes' if disasters.get(field) else 'No'
+    ws_cd.cell(row=24, column=VALUE_COL).value = cd.get('disasterOther', '') or ''
+
+    ws_cd.cell(row=27, column=VALUE_COL).value = cd.get('cityContext', '') or ''
+    ws_cd.cell(row=28, column=VALUE_COL).value = cd.get('demographics', '') or ''
+
+    # ---------------------------------------------------------------
+    # 2. Fill "Policy Checklist" sheet
+    #
+    # The sheet already has:
+    #   Row 1: header (col A = title, cols C-M = column headings)
+    #   Row 2: version row
+    #   Row 3: sub-header row  } pandas reads with header=2 (0-based)
+    #   Row 4: EXAMPLE row     } these become data rows in pandas
+    #   Row 5: example 2 row   }
+    #   Row 6+: indicator / measure / policy rows
+    #
+    # get_policy_checklist() reads with header=2 (0-based = row 3), usecols='A:M'.
+    # Columns (1-based): A=1 Measures, B=2 Policies, C=3 Policy, D=4 LoG,
+    #   E=5 Adoption date, F=6 Citation, G=7 Text, H=8 Mandatory,
+    #   I=9 Measurable target, J=10 Measurable target text,
+    #   K=11 Evidence-informed threshold, L=12 Threshold explanation, M=13 Notes
+    #
+    # The existing template rows define the indicators and measures already.
+    # We do NOT modify those rows. Instead we append our policy entry rows
+    # after each measure section.  The parse logic fills down Measures column
+    # so we just need to write the measure name once per entry.
+    #
+    # Strategy: rewrite the data section (rows 6 onwards) from scratch,
+    # preserving the indicator/measure header rows but replacing any
+    # EXAMPLE rows and injecting policy entries inline.
+    # ---------------------------------------------------------------
+    ws_pc = wb['Policy Checklist']
+
+    # Find the last row of the template (has content)
+    max_data_row = ws_pc.max_row
+
+    # Collect all existing rows 1-5 (header rows) as-is — we keep them.
+    # Then rebuild rows 6+ by iterating ghsci_policies structure and
+    # inserting form policy entries.
+
+    # Read the version from row 2 col A (already in the template)
+    # We will write the new data section starting at the first indicator row.
+    # Find where indicators start: scan for a cell in col A that matches an indicator name.
+    INDICATOR_COL = 1   # A
+    QUALIFIER_COL = 2   # B
+    POLICY_COL = 3      # C
+    LOG_COL = 4         # D
+    DATE_COL = 5        # E
+    CITATION_COL = 6    # F
+    TEXT_COL = 7        # G
+    MANDATORY_COL = 8   # H
+    MEASURABLE_COL = 9  # I
+    MEASURABLE_TEXT_COL = 10  # J
+    EVIDENCE_COL = 11   # K
+    THRESHOLD_EXP_COL = 12   # L
+    NOTES_COL = 13      # M
+
+    indicator_names = set(ghsci_policies['Indicators'].keys())
+
+    # Find the first indicator row
+    first_indicator_row = None
+    for row_idx in range(1, max_data_row + 1):
+        cell_val = ws_pc.cell(row=row_idx, column=INDICATOR_COL).value
+        if cell_val and str(cell_val).strip() in indicator_names:
+            first_indicator_row = row_idx
+            break
+
+    if first_indicator_row is None:
+        # Fallback: start at row 6
+        first_indicator_row = 6
+
+    # Clear rows from first_indicator_row onwards
+    for row_idx in range(first_indicator_row, max_data_row + 1):
+        for col_idx in range(1, 14):
+            ws_pc.cell(row=row_idx, column=col_idx).value = None
+
+    # Write the policy data
+    policies_form = form_data.get('policies', {})
+    current_row = first_indicator_row
+
+    def _write_policy_entry(row, measure, principle_text, entry):
+        """Write one policy entry row into the Policy Checklist sheet.
+
+        ``principle_text`` goes in col B (Policies) so that the fill-down
+        qualifier logic in get_policy_checklist() picks it up correctly.
+        """
+        ws_pc.cell(row=row, column=INDICATOR_COL).value = measure
+        ws_pc.cell(row=row, column=QUALIFIER_COL).value = principle_text or None
+        ws_pc.cell(row=row, column=POLICY_COL).value = entry.get('policy', '') or None
+        ws_pc.cell(row=row, column=LOG_COL).value = entry.get('levelOfGovernment', '') or None
+        date_entry = entry.get('adoptionDate', '')
+        try:
+            ws_pc.cell(row=row, column=DATE_COL).value = int(date_entry) if date_entry else None
+        except (ValueError, TypeError):
+            ws_pc.cell(row=row, column=DATE_COL).value = date_entry or None
+        ws_pc.cell(row=row, column=CITATION_COL).value = entry.get('citation', '') or None
+        ws_pc.cell(row=row, column=TEXT_COL).value = entry.get('text', '') or None
+        ws_pc.cell(row=row, column=MANDATORY_COL).value = entry.get('mandatory', '') or None
+        ws_pc.cell(row=row, column=MEASURABLE_COL).value = entry.get('measurableTarget', '') or None
+        ws_pc.cell(row=row, column=MEASURABLE_TEXT_COL).value = entry.get('measurableTargetText', '') or None
+        ws_pc.cell(row=row, column=EVIDENCE_COL).value = entry.get('evidenceInformedThreshold', '') or None
+        ws_pc.cell(row=row, column=THRESHOLD_EXP_COL).value = entry.get('thresholdExplanation', '') or None
+        ws_pc.cell(row=row, column=NOTES_COL).value = entry.get('notes', '') or None
+
+    for indicator, measures in ghsci_policies['Indicators'].items():
+        # Write indicator header row (col A only; col B left blank as in template)
+        ws_pc.cell(row=current_row, column=INDICATOR_COL).value = indicator
+        current_row += 1
+
+        for measure in measures:
+            measure_key = measure.strip()
+            measure_data = policies_form.get(measure_key, {}) if policies_form.get(measure_key) else {}
+
+            principles = measure_data.get('principles', [])
+            flat_entries = measure_data.get('entries', [])
+
+            # Write the measure name row (col A; col B blank)
+            ws_pc.cell(row=current_row, column=INDICATOR_COL).value = measure
+            current_row += 1
+
+            if principles:
+                # Principle-based mode: group by qualifier, write qualifier heading
+                # row then each principle + its policy entries.
+                # Collect Yes and No groups preserving user ordering.
+                yes_principles = [p for p in principles if p.get('qualifier') == 'Yes']
+                no_principles  = [p for p in principles if p.get('qualifier') == 'No']
+
+                for qualifier_label, group in (('Yes', yes_principles), ('No', no_principles)):
+                    if not group:
+                        continue
+                    # Write the qualifier heading row (col B = "Yes" or "No")
+                    ws_pc.cell(row=current_row, column=INDICATOR_COL).value = measure
+                    ws_pc.cell(row=current_row, column=QUALIFIER_COL).value = qualifier_label
+                    current_row += 1
+
+                    for pe in group:
+                        principle_text = pe.get('principle', '').strip()
+                        pe_entries = pe.get('entries', [])
+                        if not principle_text and not pe_entries:
+                            continue  # skip empty other-principle rows
+                        # Write principle row (col B = principle text, no policy cols)
+                        ws_pc.cell(row=current_row, column=INDICATOR_COL).value = measure
+                        ws_pc.cell(row=current_row, column=QUALIFIER_COL).value = principle_text or None
+                        current_row += 1
+                        # Write each policy entry for this principle
+                        for entry in pe_entries:
+                            _write_policy_entry(current_row, measure, principle_text, entry)
+                            current_row += 1
+            else:
+                # Flat-entry mode (measures with no Yes/No headings): write
+                # entries directly under the measure row with col B empty.
+                for entry in flat_entries:
+                    _write_policy_entry(current_row, measure, None, entry)
+                    current_row += 1
+
+    wb.save(output_path)
+    print(f'Filled xlsx saved to {output_path}')
+
+
 def get_raw_policy_details(xlsx) -> dict:
     """Extract raw policy entries from the checklist for frontend display.
 
