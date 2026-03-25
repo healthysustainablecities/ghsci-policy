@@ -1145,7 +1145,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                   >
                     JSON
                   </button>
-                  <button
+                  <button 
                     onClick={() => {
                       if (selectedReport.policyData) {
                         setPolicyChatReport(selectedReport);
@@ -1155,7 +1155,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                       }
                     }}
                     className="btn btn-secondary"
-                    title="Chat with AI about this policy data"
+                    title="Possible future feature: chat with AI about this policy data"
+                    disabled
                   >
                     💬 Ask AI
                   </button>
