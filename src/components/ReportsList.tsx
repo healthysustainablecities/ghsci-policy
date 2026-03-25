@@ -710,19 +710,36 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
               const city = formData.collectionDetails?.city?.trim();
               const country = formData.collectionDetails?.country?.trim();
               if (!city || !country) { setEditingIncomplete(null); return; }
+
+              // Find if an incomplete form with this formId already exists (to prevent duplicates)
+              const existingIncomplete = reports.find(r => {
+                if (!r?.reportConfig) return false;
+                try {
+                  let cfg = r.reportConfig;
+                  while (typeof cfg === 'string') cfg = JSON.parse(cfg);
+                  if (cfg && typeof cfg === 'object' && '_incompleteFormData' in cfg && cfg._incompleteFormData && typeof cfg._incompleteFormData === 'object') {
+                    // Cast to any to access formId
+                    return (cfg._incompleteFormData as any).formId === formData.formId;
+                  }
+                  return false;
+                } catch { return false; }
+              });
+
               const reportConfig = JSON.stringify({ _incomplete: true, _incompleteFormData: formData });
               const fileName = `Policy audit - ${formData.collectionDetails.city} (incomplete)`;
               try {
-                if (editingIncomplete) {
+                const updateTarget = editingIncomplete || existingIncomplete;
+                if (updateTarget && updateTarget.id) {
+                  // Update the existing incomplete form
                   await client.models.PolicyReport.update({
-                    id: editingIncomplete.id,
+                    id: updateTarget.id,
                     reportConfig,
                     fileName,
                     fileSize: JSON.stringify(formData).length,
                   });
                 } else {
                   const username = (user?.username || 'unknown').replace(/[^a-zA-Z0-9-]/g, '').substring(0, 50);
-                  const syntheticKey = `public/${username}/incomplete-${Date.now()}.json`;
+                  const syntheticKey = `public/${username}/incomplete-${formData.formId}.json`;
                   await client.models.PolicyReport.create({
                     fileName,
                     fileKey: syntheticKey,

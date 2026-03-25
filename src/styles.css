@@ -2381,7 +2381,8 @@ blockquote {
 
 .pfw-principle-label {
   flex: 1;
-  font-weight: 500;
+  font-weight: 400;
+  color: rgb(111, 66, 193, 0.8);
 }
 
 .pfw-principle-label-input {
@@ -2616,6 +2617,36 @@ blockquote {
 
 .pfw-add-policy-btn:hover {
   background: rgba(13, 110, 253, 0.08);
+}
+
+/* "No policies identified" toggle next to Add policy */
+.pfw-measure-actions {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.pfw-measure-actions .pfw-add-policy-btn {
+  flex: 1;
+}
+.pfw-no-policies-btn {
+  background: none;
+  border: 1px dashed #868e96;
+  color: #868e96;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.pfw-no-policies-btn:hover {
+  background: rgba(134, 142, 150, 0.08);
+}
+.pfw-no-policies-btn.pfw-no-policies-active {
+  border: 1px solid #e8621a;
+  background: rgba(232, 98, 26, 0.08);
+  color: #e8621a;
+  font-weight: 600;
 }
 
 /* Review step */
