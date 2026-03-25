@@ -864,17 +864,6 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                   <div style={{ fontSize: 32 }}>⏳</div>
                 )}
               </div>
-
-              {/* Action buttons – centred at bottom */}
-              {effectiveStatus === 'INCOMPLETE' && (
-                <div className="action-buttons-bar">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setEditingIncomplete(report); setShowFormWizard(true); }}
-                    className="btn-icon"
-                    title="Continue editing"
-                  >✏️ Continue</button>
-                </div>
-              )}
               {(effectiveStatus === 'UPLOADED' || effectiveStatus === 'FAILED' || effectiveStatus === 'COMPLETED') && (
                 <div className="action-buttons-bar">
                   <button

@@ -1511,7 +1511,7 @@ blockquote {
   align-items: center;
   justify-content: center;
   box-shadow: 0 3px 8px rgba(0,0,0,0.3);
-  z-index: 900;
+  z-index: 1100;
   transition: background-color 0.2s, transform 0.15s;
 }
 
@@ -1521,6 +1521,19 @@ blockquote {
 }
 
 /* ── Feedback modal ──────────────────────────────────────────────────────── */
+
+.feedback-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+}
 
 .feedback-modal {
   max-width: 480px;

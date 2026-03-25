@@ -58,7 +58,7 @@ const FeedbackChat: React.FC = () => {
       </button>
 
       {open && (
-        <div className="modal-overlay" onClick={() => setOpen(false)}>
+        <div className="feedback-overlay" onClick={() => setOpen(false)}>
           <div className="modal-content feedback-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <button onClick={() => setOpen(false)} className="btn btn-close">🗙</button>
