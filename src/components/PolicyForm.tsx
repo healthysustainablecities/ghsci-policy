@@ -756,6 +756,36 @@ function PolicyEntryCard({
   onNewLevel?: (level: string) => void;
 }) {
   const set = (key: keyof PolicyEntry, value: string) => onChange({ ...entry, [key]: value });
+
+  // Handler for tab-delimited paste in policy name field
+  const handlePolicyPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text');
+    if (!text.includes('\t')) return; // Only handle tab-delimited
+    e.preventDefault();
+    // Split by tab, but allow line breaks in fields
+    const values = text.split('\t');
+    // Mapping order for PolicyEntry fields
+    const keys = [
+      'policy',
+      'levelOfGovernment',
+      'adoptionDate',
+      'citation',
+      'text',
+      'mandatory',
+      'measurableTarget',
+      'measurableTargetText',
+      'evidenceInformedThreshold',
+      'thresholdExplanation',
+      'notes',
+    ] as const;
+    const updated: PolicyEntry = { ...entry };
+    for (let i = 0; i < Math.min(values.length, keys.length); ++i) {
+      updated[keys[i]] = values[i];
+    }
+    // Keep saved state as-is
+    updated.saved = entry.saved;
+    onChange(updated);
+  };
   const save = () => {
     const level = entry.levelOfGovernment.trim();
     if (level && !govLevels.includes(level) && onNewLevel) onNewLevel(level);
@@ -793,8 +823,13 @@ function PolicyEntryCard({
       <div className="pf-fields">
         <label className="pf-label">
           Policy name <span className="pf-required">*</span>
-          <input className="pf-input" value={entry.policy}
-            onChange={e => set('policy', e.target.value)} placeholder="Name of the policy document" />
+          <input
+            className="pf-input"
+            value={entry.policy}
+            onChange={e => set('policy', e.target.value)}
+            onPaste={handlePolicyPaste}
+            placeholder="Name of the policy document"
+          />
         </label>
 
         <div className={`pf-field-row ${simpleMode ? 'pf-two-col' : 'pf-three-col'}`}>
