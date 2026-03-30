@@ -1702,7 +1702,7 @@ export function PolicyForm({ onSubmit, onClose, initialData }: PolicyFormProps) 
         <div className="modal-header">
           <button onClick={handleClose} className="btn btn-close">🗙</button>
           <h3 style={{ margin: 0 }}>Complete a new policy audit</h3>
-          <i>In development; feedback welcome!</i>
+          <i>In development; feedback welcome!  This is an experimental feature, and while inputs are saved, submission for generating a report does not yet work.</i>
         </div>
 
         {/* Step indicator */}
