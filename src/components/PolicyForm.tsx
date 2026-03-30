@@ -1311,10 +1311,18 @@ function PolicyChecklistStep({
   govLevels: string[];
   onNewLevel?: (level: string) => void;
 }) {
-  const [openIndicators, setOpenIndicators] = useState<Record<string, boolean>>({});
 
-  const toggleIndicator = (ind: string) =>
-    setOpenIndicators(s => ({ ...s, [ind]: !s[ind] }));
+  // Only one indicator and one measure open at a time
+  const [openIndicator, setOpenIndicator] = useState<string | null>(null);
+  const [openMeasure, setOpenMeasure] = useState<string | null>(null);
+
+  const handleIndicatorClick = (ind: string) => {
+    setOpenIndicator(prev => (prev === ind ? null : ind));
+    setOpenMeasure(null); // close any open measure when switching indicator
+  };
+  const handleMeasureClick = (measure: string) => {
+    setOpenMeasure(prev => (prev === measure ? null : measure));
+  };
 
   const updateMeasure = (measure: string, data: MeasureData) =>
     onChange({ ...policies, [measure]: data });
@@ -1342,13 +1350,13 @@ function PolicyChecklistStep({
           const data = policies[m] ?? emptyMeasure();
           return totalEntriesForMeasure(data) > 0 || data.noPoliciesIdentified;
         }).length;
-        const isOpen = !!openIndicators[indicator];
+        const isOpen = openIndicator === indicator;
         return (
           <div key={indicator} className="pf-indicator">
             <button
               type="button"
               className={`pf-indicator-header${isOpen ? ' pf-indicator-open' : ''}`}
-              onClick={() => toggleIndicator(indicator)}
+              onClick={() => handleIndicatorClick(indicator)}
             >
               <span className="pf-indicator-name">{indicator}</span>
               <span className="pf-indicator-badge">
@@ -1358,16 +1366,42 @@ function PolicyChecklistStep({
             </button>
             {isOpen && (
               <div className="pf-indicator-body">
-                {measures.map(measure => (
-                  <MeasureSection
-                    key={measure}
-                    measure={measure}
-                    data={policies[measure] ?? emptyMeasure()}
-                    onChange={d => updateMeasure(measure, d)}
-                    govLevels={govLevels}
-                    onNewLevel={onNewLevel}
-                  />
-                ))}
+                {measures.map(measure => {
+                  const measureOpen = openMeasure === measure;
+                  const data = policies[measure] ?? emptyMeasure();
+                  // Compute label for badge
+                  const totalEntries = totalEntriesForMeasure(data);
+                  const isCombinedDept = measure === 'Transport and planning combined in one government department';
+                  const label = totalEntries > 0
+                    ? (isCombinedDept
+                        ? `${totalEntries} level${totalEntries === 1 ? '' : 's'} of government entered`
+                        : `${totalEntries} polic${totalEntries === 1 ? 'y' : 'ies'} entered`)
+                    : data.noPoliciesIdentified
+                      ? 'No policies identified'
+                      : (isCombinedDept ? 'No responses entered' : 'No policies entered');
+                  return (
+                    <div key={measure} className="pf-measure-accordion">
+                      <button
+                        type="button"
+                        className={`pf-measure-header${measureOpen ? ' pf-measure-open' : ''}`}
+                        onClick={() => handleMeasureClick(measure)}
+                      >
+                        <span className="pf-measure-name">{measure}</span>
+                        <span className="pf-measure-badge">{label}</span>
+                        <span className="pf-measure-chevron">{measureOpen ? '▲' : '▼'}</span>
+                      </button>
+                      {measureOpen && (
+                        <MeasureSection
+                          measure={measure}
+                          data={data}
+                          onChange={d => updateMeasure(measure, d)}
+                          govLevels={govLevels}
+                          onNewLevel={onNewLevel}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
