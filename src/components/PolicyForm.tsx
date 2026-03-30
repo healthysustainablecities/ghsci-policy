@@ -1257,19 +1257,71 @@ function MeasureSection({
                 <div className="pf-add-principle-group">
                   <span className={`pf-principle-badge pf-badge-yes`}>{pg.yesLabel}</span>
                   <div className="pf-add-principle-btns">
-                    {pg.yesPrinciples
-                      .filter(p => !addedPrinciples.has(p))
-                      .map(p => (
-                        <button
-                          key={p}
-                          type="button"
-                          className="pf-add-principle-btn"
-                          onClick={() => addPredefinedPrinciple(p, 'Yes')}
-                          title={p}
-                        >
-                          + {p.length > 60 ? p.slice(0, 57) + '…' : p}
-                        </button>
-                      ))}
+                    {/* Group principles with '...' parent and '... ' children */}
+                    {(() => {
+                      const grouped: Array<{parent: string|null, children: string[]}> = [];
+                      let currentParent: string|null = null;
+                      let currentChildren: string[] = [];
+                      const filtered = pg.yesPrinciples.filter(p => !addedPrinciples.has(p));
+                      for (let i = 0; i < filtered.length; ++i) {
+                        const p = filtered[i];
+                        if (p.endsWith('…')) {
+                          // If we have a previous group, push it
+                          if (currentParent || currentChildren.length > 0) {
+                            grouped.push({parent: currentParent, children: currentChildren});
+                          }
+                          currentParent = p;
+                          currentChildren = [];
+                        } else if (p.startsWith('… ')) {
+                          currentChildren.push(p);
+                        } else {
+                          // If we have a previous group, push it
+                          if (currentParent || currentChildren.length > 0) {
+                            grouped.push({parent: currentParent, children: currentChildren});
+                            currentParent = null;
+                            currentChildren = [];
+                          }
+                          // Standalone principle
+                          grouped.push({parent: null, children: [p]});
+                        }
+                      }
+                      // Push any remaining group
+                      if (currentParent || currentChildren.length > 0) {
+                        grouped.push({parent: currentParent, children: currentChildren});
+                      }
+                      return grouped.map(group => (
+                        group.parent ? (
+                          <div key={group.parent} className="pf-principle-parent-group">
+                            <div className="pf-principle-parent-label">{group.parent}</div>
+                            <div className="pf-add-principle-btns pf-principle-children">
+                              {group.children.map(child => (
+                                <button
+                                  key={child}
+                                  type="button"
+                                  className="pf-add-principle-btn"
+                                  onClick={() => addPredefinedPrinciple(child, 'Yes')}
+                                  title={child}
+                                >
+                                  + {child.length > 60 ? child.slice(0, 57) + '…' : child}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          group.children.map(child => (
+                            <button
+                              key={child}
+                              type="button"
+                              className="pf-add-principle-btn"
+                              onClick={() => addPredefinedPrinciple(child, 'Yes')}
+                              title={child}
+                            >
+                              + {child.length > 60 ? child.slice(0, 57) + '…' : child}
+                            </button>
+                          ))
+                        )
+                      ));
+                    })()}
                     <button
                       type="button"
                       className="pf-add-principle-btn pf-add-other-btn"
@@ -1286,19 +1338,67 @@ function MeasureSection({
                 <div className="pf-add-principle-group pf-add-principle-group-no">
                   <span className={`pf-principle-badge pf-badge-no`}>{pg.noLabel}</span>
                   <div className="pf-add-principle-btns">
-                    {pg.noPrinciples
-                      .filter(p => !addedPrinciples.has(p))
-                      .map(p => (
-                        <button
-                          key={p}
-                          type="button"
-                          className="pf-add-principle-btn pf-add-principle-btn-no"
-                          onClick={() => addPredefinedPrinciple(p, 'No')}
-                          title={p}
-                        >
-                          + {p.length > 60 ? p.slice(0, 57) + '…' : p}
-                        </button>
-                      ))}
+                    {/* Group principles with '...' parent and '... ' children for No section */}
+                    {(() => {
+                      const grouped: Array<{parent: string|null, children: string[]}> = [];
+                      let currentParent: string|null = null;
+                      let currentChildren: string[] = [];
+                      const filtered = pg.noPrinciples.filter(p => !addedPrinciples.has(p));
+                      for (let i = 0; i < filtered.length; ++i) {
+                        const p = filtered[i];
+                        if (p.endsWith('…')) {
+                          if (currentParent || currentChildren.length > 0) {
+                            grouped.push({parent: currentParent, children: currentChildren});
+                          }
+                          currentParent = p;
+                          currentChildren = [];
+                        } else if (p.startsWith('… ')) {
+                          currentChildren.push(p);
+                        } else {
+                          if (currentParent || currentChildren.length > 0) {
+                            grouped.push({parent: currentParent, children: currentChildren});
+                            currentParent = null;
+                            currentChildren = [];
+                          }
+                          grouped.push({parent: null, children: [p]});
+                        }
+                      }
+                      if (currentParent || currentChildren.length > 0) {
+                        grouped.push({parent: currentParent, children: currentChildren});
+                      }
+                      return grouped.map(group => (
+                        group.parent ? (
+                          <div key={group.parent} className="pf-principle-parent-group">
+                            <div className="pf-principle-parent-label">{group.parent}</div>
+                            <div className="pf-add-principle-btns pf-principle-children">
+                              {group.children.map(child => (
+                                <button
+                                  key={child}
+                                  type="button"
+                                  className="pf-add-principle-btn pf-add-principle-btn-no"
+                                  onClick={() => addPredefinedPrinciple(child, 'No')}
+                                  title={child}
+                                >
+                                  + {child.length > 60 ? child.slice(0, 57) + '…' : child}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          group.children.map(child => (
+                            <button
+                              key={child}
+                              type="button"
+                              className="pf-add-principle-btn pf-add-principle-btn-no"
+                              onClick={() => addPredefinedPrinciple(child, 'No')}
+                              title={child}
+                            >
+                              + {child.length > 60 ? child.slice(0, 57) + '…' : child}
+                            </button>
+                          ))
+                        )
+                      ));
+                    })()}
                     <button
                       type="button"
                       className="pf-add-principle-btn pf-add-principle-btn-no pf-add-other-btn"
