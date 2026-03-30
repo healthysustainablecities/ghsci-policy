@@ -1321,9 +1321,19 @@ function PolicyChecklistStep({
   const updateMeasure = (measure: string, data: MeasureData) =>
     onChange({ ...policies, [measure]: data });
 
+  // Calculate overall completion percentage
+  const allMeasures = Object.values(GHSCI_INDICATORS).flat();
+  const completedMeasures = allMeasures.filter(m => {
+    const data = policies[m] ?? emptyMeasure();
+    return totalEntriesForMeasure(data) > 0 || data.noPoliciesIdentified;
+  }).length;
+  const percentComplete = allMeasures.length === 0 ? 0 : Math.round((completedMeasures / allMeasures.length) * 100);
+
   return (
     <div className="pf-step">
-      <h3 className="pf-step-title">Policy Checklist</h3>
+      <h3 className="pf-step-title">
+        Policy Checklist ({percentComplete}% complete)
+      </h3>
       <p className="pf-step-desc">
         For each measure, expand to see the Yes &amp; No principles and add policies against the principles they align with. Measures without any policies entered will be scored as not identified.
       </p>
