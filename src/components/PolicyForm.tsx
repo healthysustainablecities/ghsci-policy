@@ -1155,13 +1155,7 @@ function MeasureSection({
 
   return (
     <div className={`pf-measure${open ? ' pf-measure-open' : ''}`}>
-      <button type="button" className="pf-measure-header" onClick={() => setOpen(o => !o)}>
-        <span className="pf-measure-name">{measure}</span>
-        <span className="pf-measure-badge">{label}</span>
-        <span className="pf-measure-chevron">{open ? '▲' : '▼'}</span>
-      </button>
-
-      {open && (
+      {(
         <div className="pf-measure-body">
 
           {/* ── Flat-entry mode: no principles ─────────────────── */}
