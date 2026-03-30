@@ -1078,8 +1078,6 @@ function PrincipleSection({
               className="pf-principle-label-input"
               value={pe.principle}
               placeholder="Describe your principle…"
-              onClick={e => e.stopPropagation()}
-              onChange={e => onUpdate({ ...pe, principle: e.target.value })}
             />
           ) : (
             <span className="pf-principle-label">{pe.principle}</span>
@@ -1245,7 +1243,8 @@ function MeasureSection({
                   key={i}
                   pe={pe}
                   onUpdate={updated => updatePrinciple(i, updated)}
-                  onRemove={pe.isOther ? () => removePrinciple(i) : null}
+                  // Allow removal if 'Other' or if no policies are aligned
+                  onRemove={pe.isOther || pe.entries.length === 0 ? () => removePrinciple(i) : null}
                   govLevels={govLevels}
                   onNewLevel={onNewLevel}
                   open={openPrincipleIdx === i}
