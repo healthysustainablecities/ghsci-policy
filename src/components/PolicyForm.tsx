@@ -722,16 +722,14 @@ function CollectionDetailsStep({
 
         <label className="pf-label">
           City context
-          <span className="pf-hint">Briefly summarise the city's location, history and topography.</span>
           <textarea className="pf-textarea" rows={4} value={details.cityContext}
-            onChange={e => set('cityContext', e.target.value)} />
+            onChange={e => set('cityContext', e.target.value)} placeholder="Briefly summarise the city's location, history and topography."/>
         </label>
 
         <label className="pf-label">
           Demographics and health equity
-          <span className="pf-hint">Briefly summarise socio-economic and health characteristics.</span>
           <textarea className="pf-textarea" rows={4} value={details.demographics}
-            onChange={e => set('demographics', e.target.value)} />
+            onChange={e => set('demographics', e.target.value)} placeholder="Briefly summarise socio-economic and health characteristics." />
         </label>
       </div>
     </div>
