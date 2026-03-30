@@ -1004,6 +1004,8 @@ function PrincipleSection({
   simpleMode,
   govLevels,
   onNewLevel,
+  open,
+  onToggle,
 }: {
   pe: PrincipleEntry;
   onUpdate: (updated: PrincipleEntry) => void;
@@ -1011,8 +1013,9 @@ function PrincipleSection({
   simpleMode?: boolean;
   govLevels: string[];
   onNewLevel?: (level: string) => void;
+  open: boolean;
+  onToggle: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const qualifierClass = pe.qualifier === 'Yes' ? 'pf-principle-yes' : 'pf-principle-no';
   const policyCount = pe.entries.length;
 
@@ -1031,7 +1034,7 @@ function PrincipleSection({
   return (
     <div className={`pf-principle ${qualifierClass}${open ? ' pf-principle-open' : ''}`}>
       <div className="pf-principle-header">
-        <button type="button" className="pf-principle-toggle" onClick={() => setOpen(o => !o)}>
+        <button type="button" className="pf-principle-toggle" onClick={onToggle}>
           <span className={`pf-principle-badge pf-badge-${pe.qualifier.toLowerCase()}`}>
             {pe.qualifier}
           </span>
@@ -1091,18 +1094,10 @@ function MeasureSection({
   govLevels: string[];
   onNewLevel?: (level: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const pg = MEASURE_PRINCIPLES[measure];
   const isCombinedDept = measure === 'Transport and planning combined in one government department';
   const hasNoPrinciples = !pg || (pg.yesLabel === null && pg.noLabel === null);
   const totalEntries = totalEntriesForMeasure(data);
-  const label = totalEntries > 0
-    ? (isCombinedDept
-        ? `${totalEntries} level${totalEntries === 1 ? '' : 's'} of government entered`
-        : `${totalEntries} polic${totalEntries === 1 ? 'y' : 'ies'} entered`)
-    : data.noPoliciesIdentified
-      ? 'No policies identified'
-      : (isCombinedDept ? 'No responses entered' : 'No policies entered');
 
   const toggleNoPolicies = () => onChange({
     ...data,
@@ -1131,6 +1126,9 @@ function MeasureSection({
   const removePrinciple = (i: number) =>
     onChange({ ...data, principles: data.principles.filter((_, idx) => idx !== i) });
 
+  // Only one principle open at a time
+  const [openPrincipleIdx, setOpenPrincipleIdx] = useState<number | null>(null);
+
   // Build the set of predefined principle texts already added
   const addedPrinciples = new Set(data.principles.filter(p => !p.isOther).map(p => p.principle));
 
@@ -1154,7 +1152,7 @@ function MeasureSection({
   };
 
   return (
-    <div className={`pf-measure${open ? ' pf-measure-open' : ''}`}>
+    <div className="pf-measure">
       {(
         <div className="pf-measure-body">
 
@@ -1215,6 +1213,8 @@ function MeasureSection({
                   onRemove={pe.isOther ? () => removePrinciple(i) : null}
                   govLevels={govLevels}
                   onNewLevel={onNewLevel}
+                  open={openPrincipleIdx === i}
+                  onToggle={() => setOpenPrincipleIdx(openPrincipleIdx === i ? null : i)}
                 />
               ))}
 
