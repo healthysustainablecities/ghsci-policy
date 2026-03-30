@@ -5,7 +5,7 @@ import { uploadData } from 'aws-amplify/storage';
 import type { Schema } from '../../amplify/data/resource';
 import { ReportSettings, type ReportConfig } from './ReportSettings';
 import { PolicyChat } from './PolicyChat';
-import { PolicyFormWizard, type FormData as PolicyFormData } from './PolicyFormWizard';
+import { PolicyForm, type FormData as PolicyFormData } from './PolicyForm';
 
 interface ReportsListProps {
   onUploadComplete: (fileName: string, fileSize: number, fileKey: string) => void;
@@ -225,7 +225,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
   const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<'uploadDate' | 'completedDate' | 'cityCountry' | 'countryCity' | 'author'>('uploadDate');
   const [showStatusInfo, setShowStatusInfo] = useState(false);
-  const [showFormWizard, setShowFormWizard] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [editingIncomplete, setEditingIncomplete] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const fetchedS3KeysRef = useRef<Set<string>>(new Set());
   const client = generateClient<Schema>();
@@ -668,10 +668,10 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
       <div className="reports-grid">
         {/* Upload area as first item */}
         <div className="upload-card-split">
-          {/* Upper half — open the form wizard */}
+          {/* Upper half — open the form */}
           <div
             className="upload-card-half upload-card-form"
-            onClick={() => setShowFormWizard(true)}
+            onClick={() => setShowForm(true)}
           >
             <div>📋<br/>Complete a new policy audit</div>
           </div>
@@ -702,11 +702,11 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
           />
         </div>
 
-        {showFormWizard && (
-          <PolicyFormWizard
+        {showForm && (
+          <PolicyForm
             initialData={editingIncomplete ? getIncompleteFormData(editingIncomplete) : undefined}
             onClose={async (formData) => {
-              setShowFormWizard(false);
+              setShowForm(false);
               const city = formData.collectionDetails?.city?.trim();
               const country = formData.collectionDetails?.country?.trim();
               if (!city || !country) { setEditingIncomplete(null); return; }
@@ -760,7 +760,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                 try { await client.models.PolicyReport.delete({ id: editingIncomplete.id }); } catch {}
                 setEditingIncomplete(null);
               }
-              setShowFormWizard(false);
+              setShowForm(false);
             }}
           />
         )}
@@ -835,7 +835,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
               onClick={() => {
                 if (effectiveStatus === 'INCOMPLETE') {
                   setEditingIncomplete(report);
-                  setShowFormWizard(true);
+                  setShowForm(true);
                 } else {
                   openReport(report);
                 }

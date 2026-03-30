@@ -6,7 +6,7 @@ import type { Schema } from '../amplify/data/resource';
 import { ReportsList } from './components/ReportsList';
 import FeedbackChat from './components/feedback_chat';
 import FeedbackGallery from './components/feedback_gallery';
-import type { FormData as PolicyFormData } from './components/PolicyFormWizard';
+import type { FormData as PolicyFormData } from './components/PolicyForm';
 import outputs from '../amplify_outputs.json';
 import './styles.css';
 

@@ -1935,7 +1935,7 @@ blockquote {
 }
 
 /* ── Policy Form Wizard ──────────────────────────────────────────────────── */
-.pfw-modal {
+.pf-modal {
   max-width: 800px;
   width: 96vw;
   max-height: 92vh;
@@ -1946,7 +1946,7 @@ blockquote {
 }
 
 /* Step indicator */
-.pfw-step-indicator {
+.pf-step-indicator {
   display: flex;
   align-items: center;
   padding: 12px 24px;
@@ -1957,7 +1957,7 @@ blockquote {
   gap: 4px;
 }
 
-.pfw-step-dot {
+.pf-step-dot {
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -1971,23 +1971,23 @@ blockquote {
   flex-shrink: 0;
 }
 
-.pfw-step-dot-active {
+.pf-step-dot-active {
   background: #0d6efd;
   color: #fff;
 }
 
-.pfw-step-dot-done {
+.pf-step-dot-done {
   background: #198754;
   color: #fff;
 }
 
-.pfw-step-label {
+.pf-step-label {
   font-size: 13px;
   color: #495057;
   white-space: nowrap;
 }
 
-.pfw-step-line {
+.pf-step-line {
   flex: 1;
   min-width: 16px;
   height: 2px;
@@ -1996,14 +1996,14 @@ blockquote {
 }
 
 /* Scrollable body */
-.pfw-body {
+.pf-body {
   flex: 1;
   overflow-y: auto;
   padding: 0;
 }
 
 /* Footer */
-.pfw-footer {
+.pf-footer {
   display: flex;
   align-items: center;
   padding: 12px 24px;
@@ -2014,29 +2014,29 @@ blockquote {
 }
 
 /* Step content */
-.pfw-step {
+.pf-step {
   padding: 20px 24px 24px;
 }
 
-.pfw-step-title {
+.pf-step-title {
   margin: 0 0 4px;
   font-size: 18px;
 }
 
-.pfw-step-desc {
+.pf-step-desc {
   margin: 0 0 20px;
   color: #6c757d;
   font-size: 14px;
 }
 
 /* Form fields */
-.pfw-fields {
+.pf-fields {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-.pfw-label {
+.pf-label {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -2045,11 +2045,11 @@ blockquote {
   color: #212529;
 }
 
-.pfw-required {
+.pf-required {
   color: #dc3545;
 }
 
-.pfw-hint {
+.pf-hint {
   font-size: 12px;
   color: #6c757d;
   font-weight: 400;
@@ -2057,7 +2057,7 @@ blockquote {
 
 /* Levels of government toggle buttons */
 /* Levels of government chip input */
-.pfw-gov-chips {
+.pf-gov-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -2065,7 +2065,7 @@ blockquote {
   align-items: center;
 }
 
-.pfw-gov-chip {
+.pf-gov-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2080,23 +2080,23 @@ blockquote {
   transition: opacity 0.15s, box-shadow 0.15s;
 }
 
-.pfw-gov-chip-drag-handle {
+.pf-gov-chip-drag-handle {
   font-size: 11px;
   opacity: 0.7;
   cursor: grab;
   margin-right: 2px;
 }
 
-.pfw-gov-chip-dragging {
+.pf-gov-chip-dragging {
   opacity: 0.35;
   cursor: grabbing;
 }
 
-.pfw-gov-chip-dragover {
+.pf-gov-chip-dragover {
   box-shadow: -4px 0 0 0 #fff, -6px 0 0 0 #0d6efd;
 }
 
-.pfw-gov-chip-remove {
+.pf-gov-chip-remove {
   background: none;
   border: none;
   color: rgba(255,255,255,0.85);
@@ -2108,11 +2108,11 @@ blockquote {
   transition: color 0.15s;
 }
 
-.pfw-gov-chip-remove:hover {
+.pf-gov-chip-remove:hover {
   color: #fff;
 }
 
-.pfw-gov-add-row {
+.pf-gov-add-row {
   display: flex;
   gap: 6px;
   align-items: center;
@@ -2120,7 +2120,7 @@ blockquote {
   min-width: 200px;
 }
 
-.pfw-gov-add-input {
+.pf-gov-add-input {
   flex: 1;
   padding: 5px 10px;
   border: 1px dashed #adb5bd;
@@ -2130,13 +2130,13 @@ blockquote {
   font-family: inherit;
 }
 
-.pfw-gov-add-input:focus {
+.pf-gov-add-input:focus {
   outline: none;
   border-color: #0d6efd;
   border-style: solid;
 }
 
-.pfw-gov-add-btn {
+.pf-gov-add-btn {
   padding: 5px 12px;
   border: 1px solid #0d6efd;
   border-radius: 6px;
@@ -2149,17 +2149,17 @@ blockquote {
   transition: background 0.15s, color 0.15s;
 }
 
-.pfw-gov-add-btn:hover:not(:disabled) {
+.pf-gov-add-btn:hover:not(:disabled) {
   background: #0d6efd;
   color: #fff;
 }
 
-.pfw-gov-add-btn:disabled {
+.pf-gov-add-btn:disabled {
   opacity: 0.45;
   cursor: default;
 }
 
-.pfw-input, .pfw-select, .pfw-textarea {
+.pf-input, .pf-select, .pf-textarea {
   width: 100%;
   padding: 7px 10px;
   border: 1px solid #ced4da;
@@ -2170,60 +2170,60 @@ blockquote {
   font-family: inherit;
 }
 
-.pfw-input:focus, .pfw-select:focus, .pfw-textarea:focus {
+.pf-input:focus, .pf-select:focus, .pf-textarea:focus {
   outline: none;
   border-color: #0d6efd;
   box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
 }
 
-.pfw-textarea {
+.pf-textarea {
   resize: vertical;
   min-height: 72px;
 }
 
-.pfw-field-row {
+.pf-field-row {
   display: grid;
   gap: 14px;
 }
 
-.pfw-two-col {
+.pf-two-col {
   grid-template-columns: 1fr 1fr;
 }
 
-.pfw-three-col {
+.pf-three-col {
   grid-template-columns: 1fr 1fr 1fr;
 }
 
-.pfw-col-span-2 {
+.pf-col-span-2 {
   grid-column: span 2;
 }
 
-.pfw-mt-sm {
+.pf-mt-sm {
   margin-top: 6px;
 }
 
 /* Disaster checkboxes */
-.pfw-fieldset {
+.pf-fieldset {
   border: 1px solid #dee2e6;
   border-radius: 6px;
   padding: 12px 16px;
   margin: 0;
 }
 
-.pfw-legend {
+.pf-legend {
   font-size: 14px;
   font-weight: 500;
   padding: 0 4px;
 }
 
-.pfw-disaster-grid {
+.pf-disaster-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 8px;
   margin-top: 8px;
 }
 
-.pfw-checkbox-label {
+.pf-checkbox-label {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2233,14 +2233,14 @@ blockquote {
 }
 
 /* Indicators */
-.pfw-indicator {
+.pf-indicator {
   border: 1px solid #dee2e6;
   border-radius: 8px;
   margin-bottom: 10px;
   overflow: hidden;
 }
 
-.pfw-indicator-header {
+.pf-indicator-header {
   width: 100%;
   display: flex;
   align-items: center;
@@ -2253,29 +2253,29 @@ blockquote {
   transition: background-color 0.15s;
 }
 
-.pfw-indicator-header:hover {
+.pf-indicator-header:hover {
   background: #e9ecef;
 }
 
-.pfw-indicator-header.pfw-indicator-open {
+.pf-indicator-header.pf-indicator-open {
   background: #e7f0ff;
   border-bottom: 1px solid #dee2e6;
 }
 
-.pfw-indicator-name {
+.pf-indicator-name {
   flex: 1;
   font-weight: 600;
   font-size: 14px;
   color: #6f42c1;
 }
 
-.pfw-indicator-badge {
+.pf-indicator-badge {
   font-size: 12px;
   color: #6c757d;
   white-space: nowrap;
 }
 
-.pfw-indicator-body {
+.pf-indicator-body {
   padding: 12px;
   background: #fff;
   display: flex;
@@ -2284,13 +2284,13 @@ blockquote {
 }
 
 /* Measures */
-.pfw-measure {
+.pf-measure {
   border: 1px solid #e9ecef;
   border-radius: 6px;
   overflow: hidden;
 }
 
-.pfw-measure-header {
+.pf-measure-header {
   width: 100%;
   display: flex;
   align-items: center;
@@ -2303,33 +2303,33 @@ blockquote {
   transition: background-color 0.15s;
 }
 
-.pfw-measure-header:hover {
+.pf-measure-header:hover {
   background: #f0f4ff;
 }
 
-.pfw-measure-open .pfw-measure-header {
+.pf-measure-open .pf-measure-header {
   background: #eef3ff;
   border-bottom: 1px solid #e9ecef;
 }
 
-.pfw-measure-name {
+.pf-measure-name {
   flex: 1;
   font-size: 13px;
   font-weight: 500;
   color: rgb(111, 66, 193,0.8);
 }
 
-.pfw-measure-badge {
+.pf-measure-badge {
   font-size: 12px;
   color: #6c757d;
 }
 
-.pfw-measure-chevron {
+.pf-measure-chevron {
   font-size: 11px;
   color: #adb5bd;
 }
 
-.pfw-measure-body {
+.pf-measure-body {
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -2338,23 +2338,23 @@ blockquote {
 }
 
 /* Principle sections */
-.pfw-principle {
+.pf-principle {
   border: 1px solid #dee2e6;
   border-radius: 8px;
   margin-bottom: 6px;
   overflow: hidden;
 }
 
-.pfw-principle-yes { border-left: 4px solid #2b8a3e; }
-.pfw-principle-no  { border-left: 4px solid #c92a2a; }
+.pf-principle-yes { border-left: 4px solid #2b8a3e; }
+.pf-principle-no  { border-left: 4px solid #c92a2a; }
 
-.pfw-principle-header {
+.pf-principle-header {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.pfw-principle-toggle {
+.pf-principle-toggle {
   flex: 1;
   display: flex;
   align-items: center;
@@ -2367,11 +2367,11 @@ blockquote {
   font-size: 13px;
 }
 
-.pfw-principle-open .pfw-principle-toggle {
+.pf-principle-open .pf-principle-toggle {
   background: #f8f9fa;
 }
 
-.pfw-principle-badge {
+.pf-principle-badge {
   flex-shrink: 0;
   padding: 2px 8px;
   border-radius: 12px;
@@ -2381,16 +2381,16 @@ blockquote {
   letter-spacing: 0.5px;
 }
 
-.pfw-badge-yes { background: #d3f9d8; color: #1a6630; }
-.pfw-badge-no  { background: #ffe3e3; color: #9b1c1c; }
+.pf-badge-yes { background: #d3f9d8; color: #1a6630; }
+.pf-badge-no  { background: #ffe3e3; color: #9b1c1c; }
 
-.pfw-principle-label {
+.pf-principle-label {
   flex: 1;
   font-weight: 400;
   color: rgb(111, 66, 193, 0.8);
 }
 
-.pfw-principle-label-input {
+.pf-principle-label-input {
   flex: 1;
   border: 1px dashed #adb5bd;
   border-radius: 4px;
@@ -2399,12 +2399,12 @@ blockquote {
   background: #fff;
 }
 
-.pfw-principle-count {
+.pf-principle-count {
   color: #868e96;
   font-size: 12px;
 }
 
-.pfw-principle-body {
+.pf-principle-body {
   padding: 12px;
   border-top: 1px solid #dee2e6;
   display: flex;
@@ -2413,7 +2413,7 @@ blockquote {
 }
 
 /* Add-principle button groups */
-.pfw-add-principle-group {
+.pf-add-principle-group {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -2423,18 +2423,18 @@ blockquote {
   margin-top: 8px;
 }
 
-.pfw-add-principle-group-no {
+.pf-add-principle-group-no {
   background: #fff5f5;
 }
 
-.pfw-add-principle-btns {
+.pf-add-principle-btns {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   flex: 1;
 }
 
-.pfw-add-principle-btn {
+.pf-add-principle-btn {
   padding: 4px 10px;
   font-size: 12px;
   border: 1px solid #40c057;
@@ -2446,32 +2446,32 @@ blockquote {
   transition: background 0.15s;
 }
 
-.pfw-add-principle-btn:hover {
+.pf-add-principle-btn:hover {
   background: #d3f9d8;
 }
 
-.pfw-add-principle-btn-no {
+.pf-add-principle-btn-no {
   border-color: #fa5252;
   color: #c92a2a;
 }
 
-.pfw-add-principle-btn-no:hover {
+.pf-add-principle-btn-no:hover {
   background: #ffe3e3;
 }
 
-.pfw-add-other-btn {
+.pf-add-other-btn {
   font-style: italic;
   opacity: 0.8;
 }
 
 /* Policy entry card */
-.pfw-policy-card {
+.pf-policy-card {
   border: 1px solid #ced4da;
   border-radius: 8px;
   overflow: hidden;
 }
 
-.pfw-policy-card-header {
+.pf-policy-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2480,20 +2480,20 @@ blockquote {
   border-bottom: 1px solid #dee2e6;
 }
 
-.pfw-policy-card-title {
+.pf-policy-card-title {
   font-weight: 600;
   font-size: 13px;
 }
 
 /* Actions group in card header (Save + Remove) */
-.pfw-card-header-actions {
+.pf-card-header-actions {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 /* Save button */
-.pfw-save-btn {
+.pf-save-btn {
   background: #2b8a3e;
   color: #fff;
   border: none;
@@ -2505,12 +2505,12 @@ blockquote {
   transition: background 0.15s;
 }
 
-.pfw-save-btn:hover {
+.pf-save-btn:hover {
   background: #1f6b2f;
 }
 
 /* Edit (pencil) icon button */
-.pfw-icon-btn {
+.pf-icon-btn {
   background: none;
   border: none;
   cursor: pointer;
@@ -2521,17 +2521,17 @@ blockquote {
   transition: background-color 0.15s;
 }
 
-.pfw-icon-btn:hover {
+.pf-icon-btn:hover {
   background: rgba(0, 0, 0, 0.07);
 }
 
 /* Saved (read-only) card state */
-.pfw-policy-card-saved {
+.pf-policy-card-saved {
   border-color: #a5d6b7;
   background: #f4fff7;
 }
 
-.pfw-saved-row {
+.pf-saved-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2539,7 +2539,7 @@ blockquote {
   flex-wrap: wrap;
 }
 
-.pfw-saved-name {
+.pf-saved-name {
   font-weight: 600;
   font-size: 13px;
   flex: 1;
@@ -2549,7 +2549,7 @@ blockquote {
   text-overflow: ellipsis;
 }
 
-.pfw-saved-tag {
+.pf-saved-tag {
   flex-shrink: 0;
   font-size: 11px;
   padding: 2px 8px;
@@ -2559,17 +2559,17 @@ blockquote {
   white-space: nowrap;
 }
 
-.pfw-saved-tag-yes {
+.pf-saved-tag-yes {
   background: #d3f9d8;
   color: #1a6630;
 }
 
-.pfw-saved-tag-no {
+.pf-saved-tag-no {
   background: #ffe3e3;
   color: #9b1c1c;
 }
 
-.pfw-saved-notes {
+.pf-saved-notes {
   font-size: 12px;
   color: #868e96;
   font-style: italic;
@@ -2581,7 +2581,7 @@ blockquote {
   max-width: 220px;
 }
 
-.pfw-saved-actions {
+.pf-saved-actions {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -2589,7 +2589,7 @@ blockquote {
   margin-left: auto;
 }
 
-.pfw-remove-btn {
+.pf-remove-btn {
   background: none;
   border: none;
   cursor: pointer;
@@ -2600,15 +2600,15 @@ blockquote {
   transition: background-color 0.15s;
 }
 
-.pfw-remove-btn:hover {
+.pf-remove-btn:hover {
   background: rgba(220, 53, 69, 0.1);
 }
 
-.pfw-policy-card .pfw-fields {
+.pf-policy-card .pf-fields {
   padding: 12px;
 }
 
-.pfw-add-policy-btn {
+.pf-add-policy-btn {
   background: none;
   border: 1px dashed #0d6efd;
   color: #0d6efd;
@@ -2620,20 +2620,20 @@ blockquote {
   transition: background-color 0.15s;
 }
 
-.pfw-add-policy-btn:hover {
+.pf-add-policy-btn:hover {
   background: rgba(13, 110, 253, 0.08);
 }
 
 /* "No policies identified" toggle next to Add policy */
-.pfw-measure-actions {
+.pf-measure-actions {
   display: flex;
   gap: 8px;
   align-items: stretch;
 }
-.pfw-measure-actions .pfw-add-policy-btn {
+.pf-measure-actions .pf-add-policy-btn {
   flex: 1;
 }
-.pfw-no-policies-btn {
+.pf-no-policies-btn {
   background: none;
   border: 1px dashed #868e96;
   color: #868e96;
@@ -2644,10 +2644,10 @@ blockquote {
   white-space: nowrap;
   transition: background-color 0.15s, border-color 0.15s, color 0.15s;
 }
-.pfw-no-policies-btn:hover {
+.pf-no-policies-btn:hover {
   background: rgba(134, 142, 150, 0.08);
 }
-.pfw-no-policies-btn.pfw-no-policies-active {
+.pf-no-policies-btn.pf-no-policies-active {
   border: 1px solid #e8621a;
   background: rgba(232, 98, 26, 0.08);
   color: #e8621a;
@@ -2655,23 +2655,23 @@ blockquote {
 }
 
 /* Review step */
-.pfw-review-section {
+.pf-review-section {
   margin-bottom: 20px;
 }
 
-.pfw-review-heading {
+.pf-review-heading {
   margin: 0 0 8px;
   font-size: 15px;
   color: #495057;
 }
 
-.pfw-review-table {
+.pf-review-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
 }
 
-.pfw-review-table th {
+.pf-review-table th {
   text-align: left;
   padding: 5px 10px 5px 0;
   font-weight: 500;
@@ -2679,12 +2679,12 @@ blockquote {
   width: 40%;
 }
 
-.pfw-review-table td {
+.pf-review-table td {
   padding: 5px 10px 5px 0;
   color: #212529;
 }
 
-.pfw-warning {
+.pf-warning {
   background: #fff3cd;
   border: 1px solid #ffc107;
   border-radius: 6px;
@@ -2693,7 +2693,7 @@ blockquote {
   margin-top: 8px;
 }
 
-.pfw-submit-note {
+.pf-submit-note {
   font-size: 13px;
   color: #6c757d;
   border-top: 1px solid #dee2e6;
@@ -2702,14 +2702,14 @@ blockquote {
 }
 
 @media (max-width: 600px) {
-  .pfw-two-col,
-  .pfw-three-col {
+  .pf-two-col,
+  .pf-three-col {
     grid-template-columns: 1fr;
   }
-  .pfw-col-span-2 {
+  .pf-col-span-2 {
     grid-column: span 1;
   }
-  .pfw-step-label {
+  .pf-step-label {
     display: none;
   }
 }
