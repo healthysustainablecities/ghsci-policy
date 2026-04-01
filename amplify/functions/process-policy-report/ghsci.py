@@ -220,8 +220,7 @@ def get_phrases(
     )
     # incoporating study citations
     phrases['title_series_line2'] = phrases[reports[reporting_template]]
-    citations = get_citations(config, language, reporting_template)
-
+    citations = get_citations(language)
     # handle city-specific exceptions
     language_exceptions = city_details['exceptions']
     if (language_exceptions is not None) and (
@@ -253,47 +252,31 @@ def get_phrases(
     return phrases
 
 
-def get_citations(config, language, reporting_template):
+def get_citations(language):
     citations = {
-        'study_citations': 'https://www.healthysustainablecities.org\n\nHiggs, C., Resendiz, E., Lowe, M., Salvo, D., Hinckson, E., Adlakha, D., Liu, S., Boeing, G., Cerin, E., Schipperijn, J., Schifanella, R., Sallis, J., Heikinheimo, V., Arundel, J., Vernez Moudon, A., Giles-Corti, B. (Eds.) (2022-). 1000 Cities Challenge report series. Global Observatory of Healthy and Sustainable Cities. https://doi.org/10.6084/m9.figshare.c.8339173.',
+        'gohsc_url': 'https://www.healthysustainablecities.org',
+        'series_citation_sans_doi': 'Higgs C, Resendiz E, Lowe M, Salvo D, Hinckson E, Adlakha D, Liu S, Boeing G, Cerin E, Schipperijn J, Schifanella R, Sallis J, Heikinheimo V, Arundel J, Vernez Moudon A, Giles-Corti B (Eds.) (2022-). 1000 Cities Challenge report series. Global Observatory of Healthy and Sustainable Cities.',
+        'series_doi': 'https://doi.org/10.6084/m9.figshare.c.8339173.',
         'software_citation': 'Higgs C, Lowe M, Giles-Corti B, Boeing G, Delclòs-Alió X, Puig-Ribera A, et al. Global Healthy and Sustainable City Indicators: Collaborative development of an open science toolkit for calculating and reporting on urban indicators internationally. Environment and Planning B: Urban Analytics and City Science. 2024;52(5):23998083241292102. https://doi.org/10.1177/23998083241292102.',
         'policy_citation': 'Lowe M, Adlakha D, Sallis JF, Salvo D, Cerin E, Moudon AV, et al. City planning policies to support health and sustainability: an international comparison of policy indicators for 25 cities. The Lancet Global Health. 2022;10(6):e882-e94. https://doi.org/10.1016/S2214-109X(22)00069-9.',
-        'spatial_citation': 'Boeing G, Higgs C, Liu S, Giles-Corti B, Sallis JF, Cerin E, et al. Using open data and open-source software to develop spatial indicators of urban design and transport features for achieving healthy and sustainable cities. The Lancet Global Health. 2022;10(6):e907-e18. https://doi.org/10.1016/S2214-109X(22)00072-9.',
-        'guhvi_citation': 'Turner R, Higgs C, Sun C, Resendiz E, Peng K, Cheng X, et al. Development and validation of the Global Urban Heat Vulnerability Index (GUHVI). Urban Climate. 2025;64:102716. https://doi.org/10.1016/j.uclim.2025.102716.',
-        'lpugs_citation': 'Turner R, Higgs C, Heikinheimo V, Hunter R, Vargas JCB, Liu S, et al. Internationally Validated Open Access Indicators of Large Public Urban Green Space for Healthy and Sustainable Cities. Geographical Analysis. 2025;57(4):793-808. https://doi.org/10.1111/gean.70023.',
-        'colour_citation': 'Crameri, F. (2018). Scientific colour-maps (3.0.4). Zenodo. https://doi.org/10.5281/zenodo.1287763',
-        'citations': '{citation_series}: {study_citations}\n\n{citation_population}: {region_population_citation}\n\n{citation_boundaries}: {region_urban_region_citation}\n\n{citation_features}: {region_OpenStreetMap_citation}\n\n{citation_colour}: {colour_citation}',
     }
-    if 'policy' in reporting_template:
-        citations['study_citations'] = (
-            citations['study_citations']
-            + '\n\n'
-            + citations['policy_citation']
-        )
-    if 'spatial' in reporting_template:
-        citations['study_citations'] = (
-            citations['study_citations']
-            + '\n\n'
-            + citations['spatial_citation']
-        )
-        if 'gee' in config and config['gee'] is True:
-            citations['study_citations'] = (
-                citations['study_citations']
-                + '\n\n'
-                + citations['guhvi_citation']
-                + '\n\n'
-                + citations['lpugs_citation']
-            )
-    citations['study_citations'] = (
-        citations['study_citations'] + '\n\n' + citations['software_citation']
+    citations['study_citations'] = '\n\n'.join(
+                (
+                    citations['gohsc_url'],
+                    f"{citations['series_citation_sans_doi']} {citations['series_doi']}",
+                    citations['policy_citation'],
+                    citations['software_citation']
+                )
     )
+    
+    citations['citations'] = '{citation_series}: {study_citations}'
     if language == 'English':
         citations['citation_doi'] = (
-            '{author_names}. {year}. {title_series_line1}: {title_city}—{title_series_line2} ({vernacular}). In Higgs, C., Resendiz, E., Lowe, M., Salvo, D., Hinckson, E., Adlakha, D., Liu, S., Boeing, G., Cerin, E., Schipperijn, J., Schifanella, R., Sallis, J., Heikinheimo, V., Arundel, J., Vernez Moudon, A., Giles-Corti, B. (Eds.) (2022-). 1000 Cities Challenge report series. Global Observatory of Healthy and Sustainable Cities. {city_doi}'
+            '{author_names}. {year}. {title_series_line1}: {title_city}—{title_series_line2} ({vernacular}). In ' + citations['series_citation_sans_doi'] + ' {city_doi}'
         )
     else:
         citations['citation_doi'] = (
-            '{author_names}. {year}. {title_series_line1}: {title_city}—{title_series_line2} ({vernacular}). {translation}. In Higgs, C., Resendiz, E., Lowe, M., Salvo, D., Hinckson, E., Adlakha, D., Liu, S., Boeing, G., Cerin, E., Schipperijn, J., Schifanella, R., Sallis, J., Heikinheimo, V., Arundel, J., Vernez Moudon, A., Giles-Corti, B. (Eds.) (2022-). 1000 Cities Challenge report series. Global Observatory of Healthy and Sustainable Cities. {city_doi}'
+            '{author_names}. {year}. {title_series_line1}: {title_city}—{title_series_line2} ({vernacular}). {translation}. In ' + citations['series_citation_sans_doi'] + ' {city_doi}'
         )
     return citations
 
