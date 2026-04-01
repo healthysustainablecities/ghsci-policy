@@ -16,6 +16,18 @@ authors:
     - family-names: Salvo
       given-names: Deborah
       orcid: https://orcid.org/0000-0002-9726-0882
+    - family-names: Queralt
+      given-names: Ana
+      orcid: https://orcid.org/0000-0003-2782-2955
+    - family-names: Molina-García
+      given-names: Javier
+      orcid: https://orcid.org/0000-0001-6713-5936
+    - family-names: Puig-Ribera
+      given-names: Anna
+      orcid: https://orcid.org/0000-0003-2910-1924
+    - family-names: Delclòs-Alió
+      given-names: Xavier
+      orcid: https://orcid.org/0000-0002-7206-2310
     - family-names: Hinckson
       given-names: Erica
       orcid: https://orcid.org/0000-0003-3928-7830
@@ -40,9 +52,6 @@ authors:
     - family-names: Heikinheimo
       given-names: Vuokko
       orcid: https://orcid.org/0000-0001-5119-0957
-    - family-names: Delclòs-Alió
-      given-names: Xavier
-      orcid: https://orcid.org/0000-0002-7206-2310
     - family-names: Moudon
       given-names: Anne Vernez
       orcid: https://orcid.org/0000-0001-8485-4799
