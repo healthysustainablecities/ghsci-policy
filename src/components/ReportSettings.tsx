@@ -312,7 +312,6 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
         <div className="summary-item"><strong>DOI:</strong> {doi}</div>
         <div className="summary-item"><strong>City:</strong> {city}</div>
         <div className="summary-item"><strong>Country:</strong> {country}</div>
-        
         {config.reporting?.languages?.English?.context?.filter((item) => {
           const key = Object.keys(item)[0];
           // Exclude auto-populated fields from Excel
@@ -326,6 +325,10 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
             </div>
           );
         })}
+        <div className="summary-item">
+          <strong>Policy summary:</strong>
+          <div className="summary-text">{config.reporting?.languages?.English?.summary_policy || 'Not set'}</div>
+        </div>
         <div className="summary-item">
           <strong>Custom text box font size</strong> {config.reporting?.custom_text_box_fontsize ?? 12}
         </div>
@@ -419,6 +422,15 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
               </label>
             );
           })}
+
+          <label className="settings-field">
+            <span>Policy summary</span>
+            <textarea
+              rows={4}
+              value={config.reporting?.languages?.English?.summary_policy || ''}
+              onChange={(e) => updateConfig(['reporting', 'languages', 'English', 'summary_policy'], e.target.value)}
+            />
+          </label>
           
           <label className="settings-field">
             <span>Custom text box font size</span>
