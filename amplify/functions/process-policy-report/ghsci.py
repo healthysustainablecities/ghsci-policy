@@ -153,6 +153,8 @@ def get_phrases(
     phrases = json.loads(languages.set_index('name').to_json())[language]
     # _check_config_language(language=language, languages=languages)
     city_details = config['reporting']
+    citations = get_citations(config, language, reporting_template)
+    # Compile phrases given language and reporting template
     phrases['city'] = config['name']
     phrases['city_name'] = city_details['languages'][language]['name']
     phrases['country'] = city_details['languages'][language]['country']
@@ -206,9 +208,7 @@ def get_phrases(
     ):
         phrases['city_doi'] = city_details[f'doi_{reporting_template}']
     if phrases['city_doi'] == '':
-        phrases['city_doi'] = (
-            'https://doi.org/10.6084/m9.figshare.c.8339173'
-        )
+            phrases['city_doi'] = citations.get('series_citation_doi', '')
     for i in range(1, len(city_details['images']) + 1):
         phrases[f'Image {i} file'] = city_details['images'][str(i)]['file']
         phrases[f'Image {i} credit'] = city_details['images'][str(i)]['credit']
@@ -220,7 +220,6 @@ def get_phrases(
     )
     # incoporating study citations
     phrases['title_series_line2'] = phrases[reports[reporting_template]]
-    citations = get_citations(language)
     # handle city-specific exceptions
     language_exceptions = city_details['exceptions']
     if (language_exceptions is not None) and (
@@ -252,33 +251,52 @@ def get_phrases(
     return phrases
 
 
-def get_citations(language):
+def get_citations(config, language, reporting_template):
     citations = {
-        'gohsc_url': 'https://www.healthysustainablecities.org',
-        'series_citation_sans_doi': 'Higgs C, Resendiz E, Lowe M, Salvo D, Hinckson E, Adlakha D, Liu S, Boeing G, Cerin E, Schipperijn J, Schifanella R, Sallis J, Heikinheimo V, Arundel J, Vernez Moudon A, Giles-Corti B (Eds.) (2022-). 1000 Cities Challenge report series. Global Observatory of Healthy and Sustainable Cities.',
-        'series_doi': 'https://doi.org/10.6084/m9.figshare.c.8339173.',
+        'study_citations': 'https://www.healthysustainablecities.org',
+        'series_citation': 'Higgs, C., Resendiz, E., Lowe, M., Salvo, D., Hinckson, E., Adlakha, D., Liu, S., Boeing, G., Cerin, E., Schipperijn, J., Schifanella, R., Sallis, J., Heikinheimo, V., Arundel, J., Vernez Moudon, A., Giles-Corti, B. (Eds.) (2023-). 1000 Cities Challenge report series. Global Observatory of Healthy and Sustainable Cities.',
+        'series_citation_doi': 'https://doi.org/10.6084/m9.figshare.c.8339173',
         'software_citation': 'Higgs C, Lowe M, Giles-Corti B, Boeing G, Delclòs-Alió X, Puig-Ribera A, et al. Global Healthy and Sustainable City Indicators: Collaborative development of an open science toolkit for calculating and reporting on urban indicators internationally. Environment and Planning B: Urban Analytics and City Science. 2024;52(5):23998083241292102. https://doi.org/10.1177/23998083241292102.',
         'policy_citation': 'Lowe M, Adlakha D, Sallis JF, Salvo D, Cerin E, Moudon AV, et al. City planning policies to support health and sustainability: an international comparison of policy indicators for 25 cities. The Lancet Global Health. 2022;10(6):e882-e94. https://doi.org/10.1016/S2214-109X(22)00069-9.',
+        'spatial_citation': 'Boeing G, Higgs C, Liu S, Giles-Corti B, Sallis JF, Cerin E, et al. Using open data and open-source software to develop spatial indicators of urban design and transport features for achieving healthy and sustainable cities. The Lancet Global Health. 2022;10(6):e907-e18. https://doi.org/10.1016/S2214-109X(22)00072-9.',
+        'thresholds_citation': 'Cerin E, Sallis JF, Salvo D, Hinckson E, Conway TL, Owen N, et al. Determining thresholds for spatial urban design and transport features that support walking to create healthy and sustainable cities: findings from the IPEN Adult study. The Lancet Global Health. 2022;10(6):e895-e906. https://doi.org/10.1016/S2214-109X(22)00068-7 ',
+        'guhvi_citation': 'Turner R, Higgs C, Sun C, Resendiz E, Peng K, Cheng X, et al. Development and validation of the Global Urban Heat Vulnerability Index (GUHVI). Urban Climate. 2025;64:102716. https://doi.org/10.1016/j.uclim.2025.102716.',
+        'lpugs_citation': 'Turner R, Higgs C, Heikinheimo V, Hunter R, Vargas JCB, Liu S, et al. Internationally Validated Open Access Indicators of Large Public Urban Green Space for Healthy and Sustainable Cities. Geographical Analysis. 2025;57(4):793-808. https://doi.org/10.1111/gean.70023.',
+        'ghsci_policy_citation': 'Higgs C, Lowe M, Adlakha D, Resendiz E, Salvo D, Hinckson E, et al. (2026). Global Healthy and Sustainable City Indicators (GHSCI) Policy. RMIT University. https://doi.org/10.25439/rmt.31796170'
     }
-    citations['study_citations'] = '\n\n'.join(
-                (
-                    citations['gohsc_url'],
-                    f"{citations['series_citation_sans_doi']} {citations['series_doi']}",
-                    citations['policy_citation'],
-                    citations['software_citation']
-                )
-    )
-    
-    citations['citations'] = '{citation_series}: {study_citations}'
+    if 'policy' in reporting_template:
+        citations['study_citations'] = (
+            citations['study_citations']
+            + '\n\n'
+            + citations['policy_citation']
+        )
+    if 'spatial' in reporting_template:
+        citations['study_citations'] = (
+            citations['study_citations']
+            + '\n\n'
+            + citations['spatial_citation']
+            + '\n\n'
+            + citations['thresholds_citation']
+        )
+        if 'gee' in config and config['gee'] is True:
+            citations['study_citations'] = (
+                citations['study_citations']
+                + '\n\n'
+                + citations['guhvi_citation']
+                + '\n\n'
+                + citations['lpugs_citation']
+            )
+    citations['study_citations'] = citations['study_citations']+f'\n\n{citations["ghsci_policy_citation"]}'
     if language == 'English':
         citations['citation_doi'] = (
-            '{author_names}. {year}. {title_series_line1}: {title_city}—{title_series_line2} ({vernacular}). In ' + citations['series_citation_sans_doi'] + ' {city_doi}'
+            '{author_names}. {year}. {title_series_line1}: {title_city}—{title_series_line2} ({vernacular}). In ' + citations['series_citation'] + ' {city_doi}'
         )
     else:
         citations['citation_doi'] = (
-            '{author_names}. {year}. {title_series_line1}: {title_city}—{title_series_line2} ({vernacular}). {translation}. In ' + citations['series_citation_sans_doi'] + ' {city_doi}'
+            '{author_names}. {year}. {title_series_line1}: {title_city}—{title_series_line2} ({vernacular}). {translation}. In ' + citations['series_citation'] + ' {city_doi}'
         )
     return citations
+
 
 
 def generate_online_policy_report(
@@ -1742,34 +1760,56 @@ def _pdf_insert_cover_page(pdf, pages, phrases):
 
 def _pdf_insert_citation_page(pdf, pages, phrases):
     """Add and render PDF report citation page."""
+    import datetime
     pdf.add_page()
     template = FlexTemplate(pdf, elements=pages['2'])
-    template['citations'] = phrases['citations']
-    template['authors'] = template['authors'].format(**phrases)
-    template['edited'] = template['edited'].format(**phrases)
-    template['translation'] = template['translation'].format(**phrases)
-    # template['author_names'] = phrases['author_names']
-    if phrases['translation_names'] in [None, '']:
-        template['translation'] = ''
-        # template['translation_names'] = ''
-    example = False
-    date = config['pdf']['policy_review_setting']['Date']
-    if str(date) in ['', 'nan', 'NaN', 'None']:
-        date = ''
+    authors = phrases.get('authors', '').format(**phrases)
+    year = datetime.date.today().year
+    codename = config.get('codename','')
+    if codename.startswith('example_ES_Las_Palmas_2023'):
+        other_credits = (
+            f"{phrases['example_report_only']}:\nhttps://healthysustainablecities.github.io/global-indicators/"
+        )
+        example = True
     else:
-        date = f' ({date})'
-    policy_review_credit = f"""{phrases['Policy review conducted by']}: {config['pdf']['policy_review_setting']['Person(s)']}{date}{['', ' (example only)'][example]}"""
-    template['citations'] = phrases['citations'].replace(
-        '.org\n\n',
-        f'.org\n\n{policy_review_credit}\n\n',
-    )
-    if config['pdf']['report_template'] == 'policy':
-        template['citations'] = (
-            '{citation_series}: {study_citations}\n\n{policy_review_credit}'.format(
-                policy_review_credit=policy_review_credit,
+        other_credits = phrases.get('other_credits', '')
+        example = False
+    if (
+        'policy' in config['pdf']['report_template']
+        and config['pdf']['policy_review'] is not None
+        and config['pdf']['policy_review_setting'] is not None
+        and 'Date' in config['pdf']['policy_review_setting']
+    ):
+        date = config['pdf']['policy_review_setting']['Date']
+        if str(date) in ['', 'nan', 'NaN', 'None']:
+            date = ''
+        else:
+            date = f' ({date})'
+        policy_review_credit = f"""{phrases['Policy review conducted by']}: {config['pdf']['policy_review_setting']['Person(s)']}{date}{['', ' (example only)'][example]}"""
+        if config['pdf']['report_template'] == 'policy':
+            template['citations'] = (
+                '{citation_series}: {study_citations}' + f'\n\n{authors}\n\n{policy_review_credit}'
+            ).format(
                 **phrases,
             )
-        )
+        elif 'policy' in config['pdf']['report_template']:
+            template['citations'] = (
+                phrases['citations'] + f'\n\n{authors}\n\n{policy_review_credit}'
+            ).format(
+              **phrases,
+            )
+    else:
+        template['citations'] = f"{phrases['citations']}\n\n{authors}"
+    if phrases['translation_names'] in [None, '']:
+        translation = ''
+    else:
+        translation = phrases.get('translation', '')
+    edited = phrases.get('edited', '')
+    GHSCIC = f'Global Observatory of Healthy and Sustainable Cities {year}'
+    end_matter = f'{edited}\n\n{translation}\n\n{other_credits}\n\n{GHSCIC}'.format(**phrases)
+    template['citations'] = (
+        f"{template['citations']}\n\n{end_matter}"
+    ).replace('\n\n\n\n', '\n\n').replace('\n\n\n\n', '\n\n')
     template.render()
     return pdf
 
