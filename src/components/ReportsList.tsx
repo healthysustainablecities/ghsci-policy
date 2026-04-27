@@ -11,6 +11,7 @@ interface ReportsListProps {
   onUploadComplete: (fileName: string, fileSize: number, fileKey: string) => void;
   onDeleteReport: (report: Schema["PolicyReport"]["type"]) => void;
   onProcessReport: (report: Schema["PolicyReport"]["type"]) => Promise<void>;
+  onResetReport: (report: Schema["PolicyReport"]["type"]) => Promise<void>;
   onFormSubmit: (formData: PolicyFormData) => Promise<void>;
   client: ReturnType<typeof generateClient<Schema>> | null;
   reports: Array<Schema["PolicyReport"]["type"]>;
@@ -209,7 +210,7 @@ const cellClass = (v: string) => {
   return 'cell-dash';
 };
 
-export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDeleteReport, onProcessReport, onFormSubmit, reports, user }) => {
+export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDeleteReport, onProcessReport, onResetReport, onFormSubmit, reports, user }) => {
   const [selectedReport, setSelectedReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [settingsReport, setSettingsReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [policyDataReport, setPolicyDataReport] = useState<Schema["PolicyReport"]["type"] | null>(null);
@@ -881,6 +882,20 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                   <div style={{ fontSize: 32 }}>⏳</div>
                 )}
               </div>
+              {effectiveStatus === 'PROCESSING' && (
+                <div className="action-buttons-bar">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm('Reset this stuck report to Failed so it can be retried?')) {
+                        onResetReport(report);
+                      }
+                    }}
+                    className="btn-icon"
+                    title="Reset stuck processing"
+                  >⏹️</button>
+                </div>
+              )}
               {(effectiveStatus === 'UPLOADED' || effectiveStatus === 'FAILED' || effectiveStatus === 'COMPLETED') && (
                 <div className="action-buttons-bar">
                   <button

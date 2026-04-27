@@ -270,6 +270,9 @@ function App() {
     }
 
     const isRegeneration = report.status === 'COMPLETED';
+    // Form-submitted reports have policyChecklist stored; they must go through
+    // submitPolicyForm (not triggerReportProcessing) because no real xlsx exists in S3.
+    const isFormSubmission = !!report.policyChecklist;
 
     try {
       // Update status to PROCESSING and clear any previous errors
@@ -296,25 +299,51 @@ function App() {
         throw new Error('Storage bucket name not found in configuration');
       }
 
-      // Trigger processing via custom mutation
-      const result = await client.mutations.triggerReportProcessing({
-        fileKey: report.fileKey,
-        reportConfig: typeof report.reportConfig === 'string' 
-          ? report.reportConfig 
-          : JSON.stringify(report.reportConfig),
-        bucket: bucketName,
-      });
-
-      console.log('Processing triggered:', result);
-      
-      // Check if trigger was successful
-      // result.data may be a JSON string (AppSync returns .json() as string for custom mutations)
       let triggerResult: { success?: boolean; message?: string } | null = null;
-      if (typeof result?.data === 'string') {
-        try { triggerResult = JSON.parse(result.data); } catch { triggerResult = null; }
+
+      if (isFormSubmission) {
+        // Reconstruct formData from stored policyChecklist + collectionDetails
+        let policies: any = report.policyChecklist;
+        while (typeof policies === 'string') { try { policies = JSON.parse(policies); } catch { break; } }
+        let cd: any = report.collectionDetails;
+        while (typeof cd === 'string') { try { cd = JSON.parse(cd); } catch { break; } }
+
+        const formData = { collectionDetails: cd, policies };
+
+        const result = await (client.mutations as any).submitPolicyForm({
+          formData: JSON.stringify(formData),
+          bucket: bucketName,
+          syntheticKey: report.fileKey,
+          reportConfig: typeof report.reportConfig === 'string'
+            ? report.reportConfig
+            : JSON.stringify(report.reportConfig),
+        });
+
+        if (result?.errors?.length) {
+          throw new Error(result.errors.map((e: any) => e.message).join('; '));
+        }
+        if (typeof result?.data === 'string') {
+          try { triggerResult = JSON.parse(result.data); } catch { triggerResult = null; }
+        } else {
+          triggerResult = result?.data as any;
+        }
       } else {
-        triggerResult = result?.data as { success?: boolean; message?: string } | null;
+        // Standard xlsx report: trigger re-processing of the existing file
+        const result = await client.mutations.triggerReportProcessing({
+          fileKey: report.fileKey,
+          reportConfig: typeof report.reportConfig === 'string' 
+            ? report.reportConfig 
+            : JSON.stringify(report.reportConfig),
+          bucket: bucketName,
+        });
+
+        if (typeof result?.data === 'string') {
+          try { triggerResult = JSON.parse(result.data); } catch { triggerResult = null; }
+        } else {
+          triggerResult = result?.data as { success?: boolean; message?: string } | null;
+        }
       }
+
       if (!triggerResult?.success) {
         throw new Error(triggerResult?.message || 'Failed to trigger processing');
       }
@@ -339,9 +368,24 @@ function App() {
     }
   };
 
+  const handleResetReport = async (report: Schema["PolicyReport"]["type"]) => {
+    try {
+      await client.models.PolicyReport.update({
+        id: report.id,
+        status: 'FAILED',
+        errorMessage: 'Manually reset from stuck processing state',
+      });
+    } catch (error) {
+      console.error('Failed to reset report status:', error);
+      alert('Failed to reset report status. Please try again.');
+    }
+  };
+
   const handleFormSubmit = async (formData: PolicyFormData) => {
     try {
-      const city = formData.collectionDetails?.city || 'City';
+      const cd = formData.collectionDetails;
+      const city = cd?.city || 'City';
+      const country = cd?.country || '';
       const timestamp = Date.now();
       const username = (user?.username || 'unknown').replace(/[^a-zA-Z0-9-]/g, '').substring(0, 50);
       const syntheticKey = `public/${username}/form-${timestamp}.xlsx`;
@@ -350,20 +394,75 @@ function App() {
 
       if (!bucketName) throw new Error('Storage bucket name not found in configuration');
 
+      // Build disaster context summary in the same format as parse_excel_config()
+      const disasterLabels: Record<string, string> = {
+        severeStorms: 'Severe storms',
+        floods: 'Floods',
+        bushfiresWildfires: 'Bushfires/wildfires',
+        heatwaves: 'Heatwaves',
+        extremeCold: 'Extreme cold',
+        typhoons: 'Typhoons',
+        hurricanes: 'Hurricanes',
+        cyclones: 'Cyclones',
+        earthquakes: 'Earthquakes',
+      };
+      const disasters = cd?.disasters || {};
+      const disasterSummary = Object.entries(disasterLabels)
+        .map(([key, label]) => `${label}: ${disasters[key] ? 'Yes' : 'No'}`)
+        .join('\n');
+
+      // Build reportConfig in the same structure as parse_excel_config() returns
+      const reportConfig = {
+        city,
+        country,
+        year: cd?.date || String(new Date().getFullYear()),
+        reviewer: cd?.person || '',
+        reporting: {
+          doi: '',
+          custom_text_box_fontsize: 12,
+          images: {
+            '1': { file: 'Example image of a vibrant, walkable, urban neighbourhood - landscape.jpg', credit: 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Carl Higgs, Bing Image Creator, 2023' },
+            '2': { file: 'Example image 2-Landscape.jpg', credit: 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Eugen Resendiz, Bing Image Creator, 2023' },
+            '3': { file: 'Example image of a vibrant, walkable, urban neighbourhood - square.jpg', credit: 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Carl Higgs, Bing Image Creator, 2023' },
+            '4': { file: 'Example image of climate resilient lively city watercolor-Square.jpg', credit: 'Feature inspiring healthy, sustainable urban design from your city, crediting the source, e.g.: Eugen Resendiz, Bing Image Creator, 2023' },
+          },
+          languages: {
+            English: {
+              name: city,
+              country,
+              summary_policy: 'After reviewing policy indicator results for your city, provide a contextualised summary by modifying the "summary_policy" text for each configured language within the region configuration file.',
+              context: [
+                { 'City context': [{ summary: cd?.cityContext || `Contextual information about ${city}, ${country}.` }] },
+                { 'Demographics and health equity': [{ summary: cd?.demographics || 'Demographics and health equity information can be added here.' }] },
+                { 'Environmental disaster context': [{ summary: disasterSummary }] },
+                { 'Levels of government': [{ summary: (cd?.levelsOfGovernment || []).join(', ') || 'Not specified' }] },
+              ],
+            },
+          },
+        },
+      };
+
       await client.models.PolicyReport.create({
         fileName,
         fileKey: syntheticKey,
         status: 'PROCESSING',
         fileSize: JSON.stringify(formData).length,
         uploadedAt: new Date().toISOString(),
+        collectionDetails: JSON.stringify(cd),
+        policyChecklist: JSON.stringify(formData.policies),
       });
 
       const result = await (client.mutations as any).submitPolicyForm({
         formData: JSON.stringify(formData),
         bucket: bucketName,
         syntheticKey,
+        reportConfig: JSON.stringify(reportConfig),
       });
 
+      if (result?.errors?.length) {
+        console.error('submitPolicyForm errors:', result.errors);
+        throw new Error(result.errors.map((e: any) => e.message).join('; '));
+      }
       console.log('Form submitted:', result);
       alert('Policy audit submitted. Processing will begin shortly.');
     } catch (error) {
@@ -459,6 +558,7 @@ function App() {
           onUploadComplete={handleUploadComplete}
           onDeleteReport={handleDeleteReport}
           onProcessReport={handleProcessReport}
+          onResetReport={handleResetReport}
           onFormSubmit={handleFormSubmit}
           client={client}
           reports={reports}

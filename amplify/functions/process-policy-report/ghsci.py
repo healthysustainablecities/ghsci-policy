@@ -210,8 +210,11 @@ def get_phrases(
     if phrases['city_doi'] == '':
             phrases['city_doi'] = citations.get('series_citation_doi', '')
     for i in range(1, len(city_details['images']) + 1):
-        phrases[f'Image {i} file'] = city_details['images'][str(i)]['file']
-        phrases[f'Image {i} credit'] = city_details['images'][str(i)]['credit']
+        # Images dict may have integer keys (default config) or string keys
+        # (when loaded from JSON/report_config).  Support both.
+        img_key = str(i) if str(i) in city_details['images'] else i
+        phrases[f'Image {i} file'] = city_details['images'][img_key]['file']
+        phrases[f'Image {i} credit'] = city_details['images'][img_key]['credit']
     phrases['GOHSC_executive'] = (
         'Deepti Adlakha, Jonathan Arundel, Geoff Boeing, Eugen Resendiz Bontrud, Ester Cerin, Billie Giles-Corti, Carl Higgs, Vuokko Heikinheimo, Erica Hinckson, Shiqin Liu, Melanie Lowe, Anne Vernez Moudon, Jim Sallis, Deborah Salvo'
     )
@@ -362,9 +365,11 @@ def generate_online_policy_report(
     config['reporting']['exceptions'][language]['author_names'] = (
         policy_setting['Person(s)']
     )
-    policy_review = policy_data_setup(
-        config['policy_review']
-    )
+    # Parse the checklist once and cache in config for downstream PDF functions.
+    audit = get_policy_checklist(checklist, setting=policy_setting)
+    config['policy_setting'] = policy_setting
+    config['policy_audit'] = audit
+    policy_review = policy_data_setup(audit)
     report_template = 'policy'
     if policy_review is None:
         print(
@@ -492,9 +497,13 @@ def _checklist_policy_measurable(policy):
     else:
         return '-'
 
-def policy_data_setup(xlsx: str):
-    """Returns a dictionary of policy data."""
-    # setting = get_policy_setting(xlsx)
+def policy_data_setup(audit: pd.DataFrame):
+    """Returns a dictionary of policy data.
+
+    Args:
+        audit: pre-parsed policy checklist DataFrame as returned by
+            get_policy_checklist() or get_policy_audit_from_form_data().
+    """
     policies = ghsci_policies
     # get list of all valid measures
     measures = [
@@ -504,8 +513,6 @@ def policy_data_setup(xlsx: str):
         ]
         for measure in categories
     ]
-    # read in completed policy checklist
-    audit = get_policy_checklist(xlsx)
     if audit is not None:
         # restrict policy checklist to valid measures
         audit = audit.loc[audit['Measures'].isin(measures)]
@@ -554,7 +561,7 @@ def policy_data_setup(xlsx: str):
     return checklist
 
 
-def get_policy_presence_quality_score_dictionary(xlsx):
+def get_policy_presence_quality_score_dictionary(audit: pd.DataFrame):
     """
     Returns a dictionary with scores for presence and quality of policy data.
 
@@ -575,12 +582,14 @@ def get_policy_presence_quality_score_dictionary(xlsx):
     Final quality score for measures is the product of the 'align score' and 'measurable score'.
 
     Overall quality score is the sum of the quality scores for each measure.
+
+    Args:
+        audit: pre-parsed policy checklist DataFrame as returned by
+            get_policy_checklist() or get_policy_audit_from_form_data().
     """
-    # read in completed policy checklist
-    audit = get_policy_checklist(xlsx)
     if audit is None:
         print(
-            f'Policy document does not appear to have been completed and evaluation will be skipped.  Check the configured document {xlsx} is complete to proceed.',
+            'Policy audit data is not available; presence/quality scoring will be skipped.',
         )
         return None
     # initialise and populate checklist for specific themes
@@ -809,11 +818,19 @@ def validate_no_policy_with_measurable_target_but_evidence_basis_not_evaluated(d
     return len(errors) == 0, errors
 
 
-def get_policy_checklist(xlsx) -> dict:
-    """Get and format policy checklist from Excel into series of DataFrames organised by indicator and measure in a dictionary."""
+def get_policy_checklist(xlsx, setting=None) -> dict:
+    """Get and format policy checklist from Excel into series of DataFrames organised by indicator and measure in a dictionary.
+
+    Args:
+        xlsx: path to the policy checklist xlsx file.
+        setting: optional pre-parsed setting dict from get_policy_setting().  When
+            provided the internal get_policy_setting() call is skipped, avoiding a
+            second read of the xlsx file.
+    """
 
     try:
-        setting = get_policy_setting(xlsx)
+        if setting is None:
+            setting = get_policy_setting(xlsx)
         if setting['Checklist version'] is None:
             print(
                 'Unable to determine version of policy checklist; please check the configured document is complete and includes the version number in cell A1 to proceed. Policy checklist evaluation will be skipped.',
@@ -998,254 +1015,7 @@ def get_policy_checklist_legacy(xlsx) -> dict:
         return None
 
 
-def fill_xlsx_from_form_data(form_data: dict, template_path: str, output_path: str):
-    """Fill a blank policy checklist xlsx template with data from the online form.
-
-    Args:
-        form_data: dict with keys:
-            'collectionDetails': { person, email, date, city, region, country,
-                                   levelsOfGovernment (str), disasters (dict str->bool),
-                                   disasterOther (str), cityContext (str), demographics (str) }
-            'policies': { measureName: {
-                'principles': [ { 'principle': str, 'isOther': bool,
-                                  'qualifier': 'Yes'|'No',
-                                  'entries': [ { policy, levelOfGovernment,
-                                    adoptionDate, citation, text, mandatory,
-                                    measurableTarget, measurableTargetText,
-                                    evidenceInformedThreshold, thresholdExplanation,
-                                    notes } ] } ],
-                'entries': [ ... ]  # flat list for measures with no Yes/No headings
-            } }
-        template_path: local path to the blank template xlsx
-        output_path: local path to write the filled xlsx
-    """
-    import openpyxl
-
-    wb = openpyxl.load_workbook(template_path)
-
-    # ---------------------------------------------------------------
-    # 1. Fill "Collection details" sheet
-    # Values go in column C (col index 3, 1-based)
-    # ---------------------------------------------------------------
-    cd = form_data.get('collectionDetails', {})
-    ws_cd = wb['Collection details']
-
-    # Row mapping: (row number, value)
-    # Template rows (1-based):
-    #   5  Name of person(s)
-    #   6  Email address(es)
-    #   7  Date completed
-    #   8  City
-    #   9  State/province/county/region
-    #  10  Country
-    #  11  Governments included in policy checklist
-    #  15  Severe storms
-    #  16  Floods
-    #  17  Bushfires/wildfires
-    #  18  Heatwaves
-    #  19  Extreme cold
-    #  20  Typhoons
-    #  21  Hurricanes
-    #  22  Cyclones
-    #  23  Earthquakes
-    #  24  Other (please specify)
-    #  27  City context
-    #  28  Demographics and health equity
-
-    VALUE_COL = 3  # Column C (1-based)
-
-    ws_cd.cell(row=5, column=VALUE_COL).value = cd.get('person', '')
-    ws_cd.cell(row=6, column=VALUE_COL).value = cd.get('email', '')
-    # Date: store the year string as an integer if possible so it reads as a date
-    date_val = cd.get('date', '')
-    try:
-        ws_cd.cell(row=7, column=VALUE_COL).value = int(date_val) if date_val else ''
-    except (ValueError, TypeError):
-        ws_cd.cell(row=7, column=VALUE_COL).value = date_val
-    ws_cd.cell(row=8, column=VALUE_COL).value = cd.get('city', '')
-    ws_cd.cell(row=9, column=VALUE_COL).value = cd.get('region', '')
-    ws_cd.cell(row=10, column=VALUE_COL).value = cd.get('country', '')
-    ws_cd.cell(row=11, column=VALUE_COL).value = (
-        ', '.join(cd['levelsOfGovernment'])
-        if isinstance(cd.get('levelsOfGovernment'), list)
-        else cd.get('levelsOfGovernment', '')
-    )
-
-    # Disaster context checkboxes
-    disasters_map = {
-        'severeStorms': 15,
-        'floods': 16,
-        'bushfiresWildfires': 17,
-        'heatwaves': 18,
-        'extremeCold': 19,
-        'typhoons': 20,
-        'hurricanes': 21,
-        'cyclones': 22,
-        'earthquakes': 23,
-    }
-    disasters = cd.get('disasters', {})
-    for field, row in disasters_map.items():
-        ws_cd.cell(row=row, column=VALUE_COL).value = 'Yes' if disasters.get(field) else 'No'
-    ws_cd.cell(row=24, column=VALUE_COL).value = cd.get('disasterOther', '') or ''
-
-    ws_cd.cell(row=27, column=VALUE_COL).value = cd.get('cityContext', '') or ''
-    ws_cd.cell(row=28, column=VALUE_COL).value = cd.get('demographics', '') or ''
-
-    # ---------------------------------------------------------------
-    # 2. Fill "Policy Checklist" sheet
-    #
-    # The sheet already has:
-    #   Row 1: header (col A = title, cols C-M = column headings)
-    #   Row 2: version row
-    #   Row 3: sub-header row  } pandas reads with header=2 (0-based)
-    #   Row 4: EXAMPLE row     } these become data rows in pandas
-    #   Row 5: example 2 row   }
-    #   Row 6+: indicator / measure / policy rows
-    #
-    # get_policy_checklist() reads with header=2 (0-based = row 3), usecols='A:M'.
-    # Columns (1-based): A=1 Measures, B=2 Policies, C=3 Policy, D=4 LoG,
-    #   E=5 Adoption date, F=6 Citation, G=7 Text, H=8 Mandatory,
-    #   I=9 Measurable target, J=10 Measurable target text,
-    #   K=11 Evidence-informed threshold, L=12 Threshold explanation, M=13 Notes
-    #
-    # The existing template rows define the indicators and measures already.
-    # We do NOT modify those rows. Instead we append our policy entry rows
-    # after each measure section.  The parse logic fills down Measures column
-    # so we just need to write the measure name once per entry.
-    #
-    # Strategy: rewrite the data section (rows 6 onwards) from scratch,
-    # preserving the indicator/measure header rows but replacing any
-    # EXAMPLE rows and injecting policy entries inline.
-    # ---------------------------------------------------------------
-    ws_pc = wb['Policy Checklist']
-
-    # Find the last row of the template (has content)
-    max_data_row = ws_pc.max_row
-
-    # Collect all existing rows 1-5 (header rows) as-is — we keep them.
-    # Then rebuild rows 6+ by iterating ghsci_policies structure and
-    # inserting form policy entries.
-
-    # Read the version from row 2 col A (already in the template)
-    # We will write the new data section starting at the first indicator row.
-    # Find where indicators start: scan for a cell in col A that matches an indicator name.
-    INDICATOR_COL = 1   # A
-    QUALIFIER_COL = 2   # B
-    POLICY_COL = 3      # C
-    LOG_COL = 4         # D
-    DATE_COL = 5        # E
-    CITATION_COL = 6    # F
-    TEXT_COL = 7        # G
-    MANDATORY_COL = 8   # H
-    MEASURABLE_COL = 9  # I
-    MEASURABLE_TEXT_COL = 10  # J
-    EVIDENCE_COL = 11   # K
-    THRESHOLD_EXP_COL = 12   # L
-    NOTES_COL = 13      # M
-
-    indicator_names = set(ghsci_policies['Indicators'].keys())
-
-    # Find the first indicator row
-    first_indicator_row = None
-    for row_idx in range(1, max_data_row + 1):
-        cell_val = ws_pc.cell(row=row_idx, column=INDICATOR_COL).value
-        if cell_val and str(cell_val).strip() in indicator_names:
-            first_indicator_row = row_idx
-            break
-
-    if first_indicator_row is None:
-        # Fallback: start at row 6
-        first_indicator_row = 6
-
-    # Clear rows from first_indicator_row onwards
-    for row_idx in range(first_indicator_row, max_data_row + 1):
-        for col_idx in range(1, 14):
-            ws_pc.cell(row=row_idx, column=col_idx).value = None
-
-    # Write the policy data
-    policies_form = form_data.get('policies', {})
-    current_row = first_indicator_row
-
-    def _write_policy_entry(row, measure, principle_text, entry):
-        """Write one policy entry row into the Policy Checklist sheet.
-
-        ``principle_text`` goes in col B (Policies) so that the fill-down
-        qualifier logic in get_policy_checklist() picks it up correctly.
-        """
-        ws_pc.cell(row=row, column=INDICATOR_COL).value = measure
-        ws_pc.cell(row=row, column=QUALIFIER_COL).value = principle_text or None
-        ws_pc.cell(row=row, column=POLICY_COL).value = entry.get('policy', '') or None
-        ws_pc.cell(row=row, column=LOG_COL).value = entry.get('levelOfGovernment', '') or None
-        date_entry = entry.get('adoptionDate', '')
-        try:
-            ws_pc.cell(row=row, column=DATE_COL).value = int(date_entry) if date_entry else None
-        except (ValueError, TypeError):
-            ws_pc.cell(row=row, column=DATE_COL).value = date_entry or None
-        ws_pc.cell(row=row, column=CITATION_COL).value = entry.get('citation', '') or None
-        ws_pc.cell(row=row, column=TEXT_COL).value = entry.get('text', '') or None
-        ws_pc.cell(row=row, column=MANDATORY_COL).value = entry.get('mandatory', '') or None
-        ws_pc.cell(row=row, column=MEASURABLE_COL).value = entry.get('measurableTarget', '') or None
-        ws_pc.cell(row=row, column=MEASURABLE_TEXT_COL).value = entry.get('measurableTargetText', '') or None
-        ws_pc.cell(row=row, column=EVIDENCE_COL).value = entry.get('evidenceInformedThreshold', '') or None
-        ws_pc.cell(row=row, column=THRESHOLD_EXP_COL).value = entry.get('thresholdExplanation', '') or None
-        ws_pc.cell(row=row, column=NOTES_COL).value = entry.get('notes', '') or None
-
-    for indicator, measures in ghsci_policies['Indicators'].items():
-        # Write indicator header row (col A only; col B left blank as in template)
-        ws_pc.cell(row=current_row, column=INDICATOR_COL).value = indicator
-        current_row += 1
-
-        for measure in measures:
-            measure_key = measure.strip()
-            measure_data = policies_form.get(measure_key, {}) if policies_form.get(measure_key) else {}
-
-            principles = measure_data.get('principles', [])
-            flat_entries = measure_data.get('entries', [])
-
-            # Write the measure name row (col A; col B blank)
-            ws_pc.cell(row=current_row, column=INDICATOR_COL).value = measure
-            current_row += 1
-
-            if principles:
-                # Principle-based mode: group by qualifier, write qualifier heading
-                # row then each principle + its policy entries.
-                # Collect Yes and No groups preserving user ordering.
-                yes_principles = [p for p in principles if p.get('qualifier') == 'Yes']
-                no_principles  = [p for p in principles if p.get('qualifier') == 'No']
-
-                for qualifier_label, group in (('Yes', yes_principles), ('No', no_principles)):
-                    if not group:
-                        continue
-                    # Write the qualifier heading row (col B = "Yes" or "No")
-                    ws_pc.cell(row=current_row, column=INDICATOR_COL).value = measure
-                    ws_pc.cell(row=current_row, column=QUALIFIER_COL).value = qualifier_label
-                    current_row += 1
-
-                    for pe in group:
-                        principle_text = pe.get('principle', '').strip()
-                        pe_entries = pe.get('entries', [])
-                        if not principle_text and not pe_entries:
-                            continue  # skip empty other-principle rows
-                        # Write principle row (col B = principle text, no policy cols)
-                        ws_pc.cell(row=current_row, column=INDICATOR_COL).value = measure
-                        ws_pc.cell(row=current_row, column=QUALIFIER_COL).value = principle_text or None
-                        current_row += 1
-                        # Write each policy entry for this principle
-                        for entry in pe_entries:
-                            _write_policy_entry(current_row, measure, principle_text, entry)
-                            current_row += 1
-            else:
-                # Flat-entry mode (measures with no Yes/No headings): write
-                # entries directly under the measure row with col B empty.
-                for entry in flat_entries:
-                    _write_policy_entry(current_row, measure, None, entry)
-                    current_row += 1
-
-    wb.save(output_path)
-    print(f'Filled xlsx saved to {output_path}')
-
-
-def get_raw_policy_details(xlsx) -> dict:
+def get_raw_policy_details(audit: pd.DataFrame) -> dict:
     """Extract raw policy entries from the checklist for frontend display.
 
     Returns a dict mapping measure name -> list of policy entry dicts.
@@ -1254,8 +1024,11 @@ def get_raw_policy_details(xlsx) -> dict:
     measurable_target, measurable_target_text, evidence_informed_threshold,
     threshold_explanation, notes).
     Only rows where Policy is a real entry (not empty/null) are included.
+
+    Args:
+        audit: pre-parsed policy checklist DataFrame as returned by
+            get_policy_checklist() or get_policy_audit_from_form_data().
     """
-    audit = get_policy_checklist(xlsx)
     if audit is None:
         return {}
 
@@ -1287,6 +1060,264 @@ def get_raw_policy_details(xlsx) -> dict:
             result[measure] = entries
 
     return result
+
+
+def get_policy_setting_from_form_data(collection_details: dict) -> dict:
+    """Build a policy setting dict from online form collection details.
+
+    Produces the same structure as get_policy_setting(xlsx) returns so that
+    all downstream functions (generate_online_policy_report_from_form_data,
+    get_policy_audit_from_form_data, etc.) can operate without an xlsx file.
+
+    Args:
+        collection_details: the 'collectionDetails' dict from the online form.
+
+    Returns:
+        setting dict with the same keys as get_policy_setting().
+    """
+    cd = collection_details or {}
+
+    disaster_fields = {
+        'severeStorms': 'Severe storms',
+        'floods': 'Floods',
+        'bushfiresWildfires': 'Bushfires/wildfires',
+        'heatwaves': 'Heatwaves',
+        'extremeCold': 'Extreme cold',
+        'typhoons': 'Typhoons',
+        'hurricanes': 'Hurricanes',
+        'cyclones': 'Cyclones',
+        'earthquakes': 'Earthquakes',
+    }
+    disasters = cd.get('disasters', {})
+    disaster_lines = [
+        f'{label}: {"Yes" if disasters.get(field) else "No"}'
+        for field, label in disaster_fields.items()
+    ]
+    other_disaster = cd.get('disasterOther', '')
+    if other_disaster:
+        disaster_lines.append(f'Other: {other_disaster}')
+
+    levels_of_gov = cd.get('levelsOfGovernment', '')
+    if isinstance(levels_of_gov, list):
+        levels_of_gov = ', '.join(levels_of_gov)
+
+    def _val(v):
+        return v if v else 'Not specified'
+
+    setting = {
+        'Checklist version': '2.0.0',
+        'Person(s)': _val(cd.get('person', '')),
+        'E-mail': _val(cd.get('email', '')),
+        'Date': str(cd.get('date', '')) or 'Not specified',
+        'City': _val(cd.get('city', '')),
+        'Region': _val(cd.get('region', '')),
+        'Country': _val(cd.get('country', '')),
+        'Levels of government': _val(levels_of_gov),
+        'Environmental disaster context': '\n'.join(disaster_lines) if disaster_lines else 'Not specified',
+        'City context': _val(cd.get('cityContext', '')),
+        'Demographics and health equity': _val(cd.get('demographics', '')),
+    }
+    return setting
+
+
+def get_policy_audit_from_form_data(form_policies: dict) -> pd.DataFrame:
+    """Build a policy audit DataFrame directly from online form policy data.
+
+    Produces the same structure as get_policy_checklist() returns so that
+    policy_data_setup(), get_policy_presence_quality_score_dictionary(), and
+    get_raw_policy_details() can all accept the result without an xlsx file.
+
+    Args:
+        form_policies: the 'policies' dict from the online form, mapping
+            measure name to {'principles': [...], 'entries': [...]}.
+
+    Returns:
+        DataFrame with columns: Indicators, Measures, Policies, Policy,
+        Level of government, Adoption date, Citation, Text, Mandatory,
+        Measurable target, Measurable target text, Evidence-informed threshold,
+        Threshold explanation, Notes, qualifier.
+    """
+    COLUMNS = [
+        'Indicators', 'Measures', 'Policies', 'Policy',
+        'Level of government', 'Adoption date', 'Citation', 'Text',
+        'Mandatory', 'Measurable target', 'Measurable target text',
+        'Evidence-informed threshold', 'Threshold explanation', 'Notes',
+        'qualifier',
+    ]
+    ENTRY_MAP = {
+        'levelOfGovernment': 'Level of government',
+        'adoptionDate': 'Adoption date',
+        'citation': 'Citation',
+        'text': 'Text',
+        'mandatory': 'Mandatory',
+        'measurableTarget': 'Measurable target',
+        'measurableTargetText': 'Measurable target text',
+        'evidenceInformedThreshold': 'Evidence-informed threshold',
+        'thresholdExplanation': 'Threshold explanation',
+        'notes': 'Notes',
+    }
+
+    rows = []
+    fp = form_policies or {}
+
+    for indicator, measures in ghsci_policies['Indicators'].items():
+        for measure in measures:
+            measure_data = fp.get(measure, {}) or {}
+            principles = measure_data.get('principles', [])
+            flat_entries = measure_data.get('entries', [])
+
+            rows_before = len(rows)
+
+            if principles:
+                for pe in principles:
+                    qualifier = pe.get('qualifier', '') or ''
+                    principle_text = pe.get('principle', '') or ''
+                    for entry in pe.get('entries', []):
+                        policy_val = entry.get('policy', '') or ''
+                        if not policy_val:
+                            continue
+                        row = {
+                            'Indicators': indicator,
+                            'Measures': measure,
+                            'Policies': principle_text,
+                            'Policy': policy_val,
+                            'qualifier': qualifier,
+                        }
+                        for form_key, col in ENTRY_MAP.items():
+                            v = entry.get(form_key, '') or None
+                            row[col] = v
+                        rows.append(row)
+            else:
+                for entry in flat_entries:
+                    policy_val = entry.get('policy', '') or ''
+                    if not policy_val:
+                        continue
+                    row = {
+                        'Indicators': indicator,
+                        'Measures': measure,
+                        'Policies': '',
+                        'Policy': policy_val,
+                        'qualifier': '',
+                    }
+                    for form_key, col in ENTRY_MAP.items():
+                        v = entry.get(form_key, '') or None
+                        row[col] = v
+                    rows.append(row)
+
+            # If no rows were added for this measure, add a blank sentinel row so
+            # the measure still appears in audit['Measures'].unique().  This is
+            # required for the scoring denominator to count all measures (not just
+            # identified ones), matching the behaviour of the xlsx pathway where blank
+            # template rows survive the qualifier-row filter.
+            if len(rows) == rows_before:
+                rows.append({
+                    'Indicators': indicator,
+                    'Measures': measure,
+                    'Policies': None,
+                    'Policy': '',
+                    'qualifier': '',
+                })
+
+    if not rows:
+        return pd.DataFrame(columns=COLUMNS)
+
+    df = pd.DataFrame(rows)
+    # Ensure all expected columns are present
+    for col in COLUMNS:
+        if col not in df.columns:
+            df[col] = None
+    return df[COLUMNS]
+
+
+def generate_online_policy_report_from_form_data(
+    collection_details: dict,
+    form_policies: dict,
+    bucket: str = None,
+    options: dict = {'language': 'English'},
+    report_config: dict = None,
+):
+    """Generate a policy report directly from online form data, without an xlsx file.
+
+    This is the form-pathway equivalent of generate_online_policy_report().
+    It builds the policy setting and audit DataFrame in-memory from the form
+    submission, then runs the same PDF generation pipeline.
+
+    Args:
+        collection_details: the 'collectionDetails' dict from the online form.
+        form_policies: the 'policies' dict from the online form.
+        bucket: S3 bucket name (used for image lookups).
+        options: language and other rendering options (same as generate_online_policy_report).
+        report_config: optional custom report configuration dict.
+
+    Returns:
+        fpdf2 PDF object, or None on failure.
+    """
+    policy_setting = get_policy_setting_from_form_data(collection_details)
+    audit = get_policy_audit_from_form_data(form_policies)
+
+    language = options.get('language', 'English') if options else 'English'
+    if language not in config['reporting']['languages']:
+        config['reporting']['languages'][language] = {}
+    if language not in config['reporting']['exceptions']:
+        config['reporting']['exceptions'][language] = {}
+
+    if report_config and 'reporting' in report_config:
+        print('Applying custom report configuration...')
+        custom_reporting = report_config['reporting']
+        for key, value in custom_reporting.items():
+            if key == 'languages' and language in custom_reporting.get('languages', {}):
+                for lang_key, lang_value in custom_reporting['languages'][language].items():
+                    config['reporting']['languages'][language][lang_key] = lang_value
+            elif key == 'images':
+                config['reporting']['images'] = custom_reporting['images']
+            else:
+                config['reporting'][key] = value
+        print(f"Updated config with custom settings: {list(custom_reporting.keys())}")
+
+    config['folder_path'] = os.environ.get('LAMBDA_TASK_ROOT', os.path.dirname(__file__))
+    config['bucket'] = bucket
+    config['policy_review'] = None   # no xlsx; PDF functions use config['policy_setting']
+    config['policy_setting'] = policy_setting
+    config['policy_audit'] = audit
+    config['codename'] = policy_setting['City']
+    config['name'] = policy_setting['City']
+    config['year'] = policy_setting['Date']
+    if str(config['year']) in ['nan', 'NaN', '']:
+        config['year'] = time.strftime('%Y-%m-%d')
+    config['region_dir'] = f'{bucket}/public/data'
+    config['reporting']['languages'][language]['name'] = policy_setting['City']
+    config['reporting']['languages'][language]['country'] = policy_setting['Country']
+    config['reporting']['exceptions'][language]['author_names'] = policy_setting['Person(s)']
+
+    policy_review = policy_data_setup(audit)
+    report_template = 'policy'
+    if policy_review is None:
+        print('The policy data could not be loaded from form data.')
+        return None
+
+    if options:
+        if 'images' in options:
+            config['reporting']['images'] = options['images']
+            print(f'\nCustom image configuration:\n{config["reporting"]["images"]}')
+        if 'context' in options:
+            config['reporting']['languages'][language]['context'] = options['context']
+            print(f'\nCustom context:\n{config["reporting"]["languages"][language]["context"]}')
+        if 'summary' in options:
+            config['reporting']['languages'][language]['summary_policy'] = options['summary']
+            print(f'\nCustom summary:\n{config["reporting"]["languages"][language]["summary_policy"]}')
+        if 'summary_policy' in options:
+            config['reporting']['languages'][language]['summary_policy'] = options['summary_policy']
+            print(f'\nCustom summary:\n{config["reporting"]["languages"][language]["summary_policy"]}')
+        if 'exceptions' in options:
+            config['reporting']['exceptions'][language] = options['exceptions']
+            print(f"\nCustom exceptions:\n{config['reporting']['exceptions'][language]}")
+        if 'publication_ready' in options:
+            config['reporting']['publication_ready'] = options['publication_ready']
+
+    phrases = get_phrases(language)
+    font = get_and_setup_font(language)
+    pdf = generate_pdf(font, report_template, language, phrases, policy_review)
+    return pdf
 
 
 def get_policy_setting(xlsx) -> dict:
@@ -1844,9 +1875,10 @@ def _pdf_insert_policy_scoring_page(pdf, pages, phrases):
     template = FlexTemplate(pdf, elements=pages['4'])
     pdf.add_page()
     if config['pdf']['policy_review'] is not None:
-        policy_rating = get_policy_presence_quality_score_dictionary(
-            config['policy_review'],
-        )
+        _audit_for_scoring = config.get('policy_audit')
+        if _audit_for_scoring is None:
+            _audit_for_scoring = get_policy_checklist(config['policy_review'])
+        policy_rating = get_policy_presence_quality_score_dictionary(_audit_for_scoring)
         if policy_rating is not None:
             # Check if both numerators are 0
             if (
@@ -2314,8 +2346,8 @@ def generate_pdf(
     config['pdf']['figure_path'] = f"{config['region_dir']}/figures"
     config['pdf']['indicators'] = indicators
     config['pdf']['policy_review'] = policy_review
-    config['pdf']['policy_review_setting'] = get_policy_setting(
-        config['policy_review'],
+    config['pdf']['policy_review_setting'] = (
+        config.get('policy_setting') or get_policy_setting(config['policy_review'])
     )
 
     if 'policy' in config['pdf']['report_template']:

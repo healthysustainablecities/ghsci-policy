@@ -10,7 +10,17 @@ import time
 import traceback
 from urllib.parse import unquote_plus
 from datetime import datetime
-from ghsci import generate_online_policy_report, get_policy_setting, policy_data_setup, get_policy_presence_quality_score_dictionary, get_raw_policy_details, fill_xlsx_from_form_data
+from ghsci import (
+    generate_online_policy_report,
+    generate_online_policy_report_from_form_data,
+    get_policy_setting,
+    get_policy_setting_from_form_data,
+    get_policy_checklist,
+    get_policy_audit_from_form_data,
+    policy_data_setup,
+    get_policy_presence_quality_score_dictionary,
+    get_raw_policy_details,
+)
 
 s3_client = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
@@ -118,7 +128,8 @@ def handler(event, context):
     Lambda function to process policy report uploads.
     Also handles form submissions when 'formData' is present in the event.
     """
-    print(f"Processing event: {json.dumps(event, indent=2)}")
+    print(f"Processing event keys: {list(event.keys())}")
+    print(f"Processing event (truncated): {json.dumps(event, indent=2)[:2000]}")
 
     # Form submission path: formData passed directly (no S3 file yet)
     if 'formData' in event:
@@ -131,6 +142,7 @@ def handler(event, context):
                 report_config = json.loads(report_config)
             except json.JSONDecodeError:
                 report_config = None
+        print(f"Form submission path: bucket={bucket}, synthetic_key={synthetic_key}, has_report_config={report_config is not None}")
         try:
             process_form_submission(bucket, form_data, synthetic_key, report_config)
             return {'statusCode': 200, 'body': json.dumps({'message': 'Form processed successfully'})}
@@ -605,12 +617,21 @@ def process_report(bucket, key, report_config=None):
     else:
         print("Using provided custom config")
     
+    # Parse setting + audit once so all downstream functions share the same parsed data.
+    try:
+        print("Parsing policy checklist setting and audit...")
+        policy_setting = get_policy_setting(checklist_file_path)
+        audit = get_policy_checklist(checklist_file_path, setting=policy_setting)
+        print("Policy checklist parsed successfully")
+    except Exception as e:
+        raise RuntimeError(f"Failed to parse policy checklist: {str(e)}")
+
     # Extract and save policy data for viewing
     try:
         print("Extracting policy data using policy_data_setup()...")
-        policy_data = policy_data_setup(checklist_file_path)
-        policy_scores = get_policy_presence_quality_score_dictionary(checklist_file_path)
-        policy_raw_details = get_raw_policy_details(checklist_file_path)
+        policy_data = policy_data_setup(audit)
+        policy_scores = get_policy_presence_quality_score_dictionary(audit)
+        policy_raw_details = get_raw_policy_details(audit)
         if policy_data:
             update_policy_data(key, policy_data, scores=policy_scores, raw_details=policy_raw_details)
             print("Policy data extracted and saved successfully")
@@ -658,18 +679,20 @@ def process_report(bucket, key, report_config=None):
 
 def process_form_submission(bucket, form_data, synthetic_key, report_config=None):
     """
-    Handle an online form submission by:
-    1. Checking if the DynamoDB record is already COMPLETED/PROCESSING (EventBridge duplicate guard)
-    2. Downloading the blank template xlsx from S3
-    3. Filling it with form data via fill_xlsx_from_form_data()
-    4. Uploading the filled xlsx to S3 at the synthetic_key location
-    5. Calling process_report() to run the unchanged evaluation + PDF pipeline
+    Handle an online form submission by generating a PDF directly from form data,
+    without creating or uploading an intermediate xlsx file.
+
+    The form data is converted in-memory to the same data structures that the
+    xlsx pipeline produces (policy setting dict + audit DataFrame), then fed
+    straight into generate_online_policy_report_from_form_data().
     """
     print(f"process_form_submission called with synthetic_key={synthetic_key}")
 
-    # Duplicate-trigger guard: EventBridge fires when the filled xlsx is uploaded.
-    # If our record is already PROCESSING or COMPLETED, the EventBridge invocation
-    # should be a no-op (the main invocation already handled it).
+    # Remove internal _force flag if present (no longer used, but guard against stale clients).
+    if isinstance(form_data, dict):
+        form_data.pop('_force', None)
+
+    # Duplicate guard: only skip if already COMPLETED.
     try:
         table = get_table()
         response = table.scan(
@@ -679,35 +702,82 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
         items = response.get('Items', [])
         if items:
             status = items[0].get('status', '')
-            if status in ('COMPLETED', 'PROCESSING'):
-                print(f"Duplicate trigger detected: record {synthetic_key} already has status={status}. Skipping.")
+            if status == 'COMPLETED':
+                print(f"Duplicate trigger detected: record {synthetic_key} already COMPLETED. Skipping.")
                 return
     except Exception as e:
         print(f"Warning: Could not check for duplicate trigger: {e}")
 
-    # Download blank template from S3
-    template_key = 'public/gohsc-policy-indicator-checklist.xlsx'
-    template_local = '/tmp/template-checklist.xlsx'
-    try:
-        print(f"Downloading template from s3://{bucket}/{template_key}")
-        s3_client.download_file(bucket, template_key, template_local)
-    except Exception as e:
-        raise RuntimeError(f"Failed to download template xlsx from S3 (key={template_key}): {e}")
+    collection_details = form_data.get('collectionDetails', {})
+    form_policies = form_data.get('policies', {})
 
-    # Fill template with form data
-    filled_local = '/tmp/filled-checklist.xlsx'
-    try:
-        fill_xlsx_from_form_data(form_data, template_local, filled_local)
-    except Exception as e:
-        raise RuntimeError(f"Failed to fill xlsx from form data: {e}")
+    # Derive output paths from the synthetic key (same pattern as process_report).
+    filename = synthetic_key.split('/')[-1]
+    file_basename = os.path.splitext(filename)[0]
+    output_pdf_name = f'{file_basename}.pdf'
+    pdf_local_path = f'/tmp/{output_pdf_name}'
+    s3_upload_key = f'public/reports/{output_pdf_name}'
+    print(f"Will upload PDF to: {s3_upload_key}")
 
-    # Upload filled xlsx to S3 at the synthetic key
-    try:
-        print(f"Uploading filled xlsx to s3://{bucket}/{synthetic_key}")
-        s3_client.upload_file(filled_local, bucket, synthetic_key)
-        print("Filled xlsx uploaded successfully")
-    except Exception as e:
-        raise RuntimeError(f"Failed to upload filled xlsx to S3: {e}")
+    # Persist report_config to DynamoDB before PDF generation.
+    if report_config:
+        try:
+            update_report_config(synthetic_key, report_config)
+            print("Persisted report_config to DynamoDB")
+        except Exception as e:
+            print(f"Warning: Failed to persist report_config to DynamoDB: {e}")
 
-    # Run the normal processing pipeline (parses filled xlsx, generates PDF, updates DB)
-    process_report(bucket, synthetic_key, report_config)
+    # Build in-memory parsed structures directly from form data.
+    policy_setting = get_policy_setting_from_form_data(collection_details)
+    audit = get_policy_audit_from_form_data(form_policies)
+
+    # Extract and save policy data for viewing.
+    try:
+        policy_data = policy_data_setup(audit)
+        policy_scores = get_policy_presence_quality_score_dictionary(audit)
+        policy_raw_details = get_raw_policy_details(audit)
+        if policy_data:
+            update_policy_data(synthetic_key, policy_data, scores=policy_scores, raw_details=policy_raw_details)
+            print("Policy data extracted and saved successfully")
+        else:
+            print("Warning: policy_data_setup returned None")
+    except Exception as e:
+        print(f"Warning: Error extracting policy data: {str(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+
+    # Generate PDF directly from form data.
+    try:
+        print("Generating PDF report from form data...")
+        options = {'language': 'English'}
+        pdf = generate_online_policy_report_from_form_data(
+            collection_details=collection_details,
+            form_policies=form_policies,
+            bucket=bucket,
+            options=options,
+            report_config=report_config,
+        )
+        if pdf is None:
+            raise RuntimeError("generate_online_policy_report_from_form_data returned None")
+        print("PDF generated successfully, writing to file...")
+        pdf.output(pdf_local_path)
+        print(f"PDF written to {pdf_local_path}")
+    except Exception as e:
+        update_report_status(synthetic_key, 'FAILED', error_message=str(e))
+        raise RuntimeError(f"Failed to generate PDF report: {str(e)}")
+
+    # Upload PDF to S3.
+    try:
+        print(f"Uploading PDF to S3...")
+        s3_client.upload_file(pdf_local_path, bucket, s3_upload_key)
+        print(f"Successfully uploaded PDF to {s3_upload_key}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to upload PDF to S3: {str(e)}")
+
+    # Mark as COMPLETED.
+    try:
+        update_report_status(synthetic_key, 'COMPLETED', pdf_url=s3_upload_key)
+        print(f"Form submission {synthetic_key} processed successfully")
+    except Exception as e:
+        raise RuntimeError(f"Failed to update status to COMPLETED: {str(e)}")
+
