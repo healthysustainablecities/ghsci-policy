@@ -796,7 +796,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                 title="Select for deletion"
               />
               <span>
-                {effectiveStatus !== 'INCOMPLETE' && (
+                {effectiveStatus !== 'INCOMPLETE' && !report.policyChecklist && (
                   <div
                     className="status-badge xlsx-badge"
                     onClick={(e) => { e.stopPropagation(); handleDownloadXlsx(report); }}
