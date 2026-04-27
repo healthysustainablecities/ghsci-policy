@@ -1289,6 +1289,27 @@ def generate_online_policy_report_from_form_data(
     config['reporting']['languages'][language]['country'] = policy_setting['Country']
     config['reporting']['exceptions'][language]['author_names'] = policy_setting['Person(s)']
 
+    # Build context directly from policy_setting, mirroring the xlsx parse_excel_config
+    # approach.  This ensures all data-driven blurbs ('Levels of government',
+    # 'Environmental disaster context', etc.) are always populated from the form data,
+    # regardless of whether report_config was provided (e.g. on re-trigger).
+    _city         = policy_setting.get('City', '')
+    _country      = policy_setting.get('Country', '')
+    _city_ctx     = policy_setting.get('City context', '')
+    _demographics = policy_setting.get('Demographics and health equity', '')
+    _env_disaster = policy_setting.get('Environmental disaster context', '')
+    _gov_levels   = policy_setting.get('Levels of government', '')
+    config['reporting']['languages'][language]['context'] = [
+        {'City context': [{'summary': _city_ctx if _city_ctx and _city_ctx != 'Not specified'
+                           else f'Contextual information about {_city}, {_country}.'}]},
+        {'Demographics and health equity': [{'summary': _demographics if _demographics and _demographics != 'Not specified'
+                                             else 'Demographics and health equity information can be added here.'}]},
+        {'Environmental disaster context': [{'summary': _env_disaster if _env_disaster and _env_disaster != 'Not specified'
+                                             else 'No environmental disaster context specified.'}]},
+        {'Levels of government': [{'summary': _gov_levels if _gov_levels and _gov_levels != 'Not specified'
+                                   else 'No levels of government specified.'}]},
+    ]
+
     policy_review = policy_data_setup(audit)
     report_template = 'policy'
     if policy_review is None:

@@ -302,14 +302,13 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
   };
 
   const renderSummary = () => {
-    const doi = config.reporting?.doi || 'Not specified';
+    const doi = config.reporting?.doi || 'https://doi.org/10.6084/m9.figshare.c.8339173';
     const city = config.reporting?.languages?.English?.name || 'Not specified';
     const country = config.reporting?.languages?.English?.country || 'Not specified';
     const images = config.reporting?.images || {};
     
     return (
       <div className="settings-summary" translate="no">
-        <div className="summary-item"><strong>DOI:</strong> {doi}</div>
         <div className="summary-item"><strong>City:</strong> {city}</div>
         <div className="summary-item"><strong>Country:</strong> {country}</div>
         {config.reporting?.languages?.English?.context?.filter((item) => {
@@ -362,6 +361,7 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
             </div>
           );
         })}
+        <div className="summary-item"><strong>DOI:</strong> {doi}</div>
       </div>
     );
   };
@@ -370,15 +370,6 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
     return (
       <div className="settings-content">
         <div className="settings-section">
-          <label className="settings-field">
-            <span>DOI (optional)</span>
-            <input
-              type="text"
-              placeholder="https://doi.org/10.xxxxx"
-              value={config.reporting?.doi || ''}
-              onChange={(e) => updateConfig(['reporting', 'doi'], e.target.value)}
-            />
-          </label>
 
           <label className="settings-field">
             <span>City Name</span>
@@ -498,6 +489,17 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
                 value={config.reporting?.images?.[num]?.credit || ''}
                 onChange={(e) => updateConfig(['reporting', 'images', num, 'credit'], e.target.value)}
               />
+
+              
+              <label className="settings-field">
+                <span>DOI (optional)</span>
+                <input
+                  type="text"
+                  placeholder="https://doi.org/10.6084/m9.figshare.c.8339173"
+                  value={config.reporting?.doi || ''}
+                  onChange={(e) => updateConfig(['reporting', 'doi'], e.target.value)}
+                />
+              </label>
             </div>
           ))}
         </div>
