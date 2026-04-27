@@ -711,9 +711,31 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
     collection_details = form_data.get('collectionDetails', {})
     form_policies = form_data.get('policies', {})
 
-    # Derive output paths from the synthetic key (same pattern as process_report).
-    filename = synthetic_key.split('/')[-1]
-    file_basename = os.path.splitext(filename)[0]
+    # Build a meaningful PDF filename from collection details, e.g.:
+    #   gohsc-policy-indicator-checklist-Melbourne-Australia-2025.pdf
+    # Fall back to the synthetic-key timestamp if fields are missing.
+    def _slugify(value: str) -> str:
+        """Convert a string to a URL/filename-safe slug."""
+        import re
+        value = str(value).strip()
+        value = re.sub(r'[^\w\s-]', '', value)   # remove non-word chars except dash
+        value = re.sub(r'[\s_]+', '-', value)      # spaces/underscores → dash
+        value = re.sub(r'-+', '-', value)           # collapse repeated dashes
+        return value.strip('-')
+
+    cd_city    = _slugify(collection_details.get('city', ''))
+    cd_country = _slugify(collection_details.get('country', ''))
+    cd_year    = _slugify(collection_details.get('date', ''))
+
+    if cd_city and cd_country and cd_year:
+        file_basename = f'gohsc-policy-indicator-checklist-{cd_city}-{cd_country}-{cd_year}'
+    elif cd_city and cd_country:
+        file_basename = f'gohsc-policy-indicator-checklist-{cd_city}-{cd_country}'
+    else:
+        # Fallback: use the timestamp from the synthetic key
+        filename = synthetic_key.split('/')[-1]
+        file_basename = os.path.splitext(filename)[0]
+
     output_pdf_name = f'{file_basename}.pdf'
     pdf_local_path = f'/tmp/{output_pdf_name}'
     s3_upload_key = f'public/reports/{output_pdf_name}'
