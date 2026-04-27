@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
 import { uploadData } from 'aws-amplify/storage';
@@ -228,6 +229,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
   const [showStatusInfo, setShowStatusInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingIncomplete, setEditingIncomplete] = useState<Schema["PolicyReport"]["type"] | null>(null);
+  const [pdfMenu, setPdfMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const pdfMenuCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchedS3KeysRef = useRef<Set<string>>(new Set());
   const client = generateClient<Schema>();
 
@@ -455,6 +458,24 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
       console.error('Failed to download pdf:', error);
       alert('Failed to download the PDF report.');
     }
+  };
+
+  // Parse pdfUrls JSON field (language → S3 key dict). Falls back to
+  // {English: pdfUrl} for backward-compatible single-language records.
+  const parsePdfUrls = (report: ReportsListProps['reports'][number]): Record<string, string> => {
+    if (report.pdfUrls) {
+      try {
+        // Unwrap potential double-encoding (Lambda stores JSON string; AppSync AWSJSON
+        // may wrap it again), so keep parsing while the value is still a string.
+        let raw: unknown = report.pdfUrls;
+        while (typeof raw === 'string') {
+          raw = JSON.parse(raw);
+        }
+        if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, string>;
+      } catch { /* fall through */ }
+    }
+    if (report.pdfUrl) return { English: report.pdfUrl };
+    return {};
   };
 
   const handleDownloadJson = (jsonString: string, fileName: string) => {
@@ -806,16 +827,58 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                     xlsx
                   </div>
                 )}
-                {effectiveStatus === 'COMPLETED' && report.pdfUrl && (
-                  <div
-                    className="status-badge pdf-badge"
-                    onClick={(e) => { e.stopPropagation(); handleDownloadPdf(report); }}
-                    style={{ cursor: 'pointer' }}
-                    title="Download PDF report"
-                  >
-                    pdf
-                  </div>
-                )}
+                {effectiveStatus === 'COMPLETED' && report.pdfUrl && (() => {
+                  const pdfMap = parsePdfUrls(report);
+                  const langs = Object.keys(pdfMap);
+                  const menuId = `dl-${report.id}`;
+                  const isOpen = pdfMenu?.id === menuId;
+                  const openMenu = (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    if (pdfMenuCloseTimer.current) clearTimeout(pdfMenuCloseTimer.current);
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    setPdfMenu({ id: menuId, x: rect.left, y: rect.bottom + 4 });
+                  };
+                  const scheduleClose = () => {
+                    pdfMenuCloseTimer.current = setTimeout(() => setPdfMenu(null), 150);
+                  };
+                  const cancelClose = () => {
+                    if (pdfMenuCloseTimer.current) clearTimeout(pdfMenuCloseTimer.current);
+                  };
+                  return (
+                    <>
+                      <div
+                        className="status-badge pdf-badge"
+                        onClick={langs.length === 1
+                          ? (e) => { e.stopPropagation(); handleDownloadPdf(report); }
+                          : openMenu}
+                        onMouseEnter={langs.length > 1 ? openMenu : undefined}
+                        onMouseLeave={langs.length > 1 ? scheduleClose : undefined}
+                        style={{ cursor: 'pointer' }}
+                        title={langs.length === 1 ? `Download PDF (${langs[0]})` : 'Download PDF'}
+                      >
+                        pdf
+                      </div>
+                      {isOpen && createPortal(
+                        <div
+                          className="pdf-menu"
+                          style={{ position: 'fixed', left: pdfMenu!.x, top: pdfMenu!.y, zIndex: 9999 }}
+                          onMouseEnter={cancelClose}
+                          onMouseLeave={scheduleClose}
+                        >
+                          <div className="pdf-menu-heading">Download</div>
+                          {langs.map(lang => (
+                            <button
+                              key={lang}
+                              className="pdf-menu-item"
+                              onClick={(e) => { e.stopPropagation(); handleDownloadPdf({ ...report, pdfUrl: pdfMap[lang] }); setPdfMenu(null); }}
+                            >{lang}</button>
+                          ))}
+                        </div>,
+                        document.body
+                      )}
+                    </>
+                  );
+                })()}
                 <div 
                   className={`status-badge ${getStatusClass(effectiveStatus)}`}
                   onClick={(e) => {
@@ -925,13 +988,55 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                       title="Regenerate report"
                     >🔄</button>
                   )}
-                  {effectiveStatus === 'COMPLETED' && report.pdfUrl && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleViewPdf(report.pdfUrl!, report); }}
-                      className="btn-icon"
-                      title="View PDF"
-                    >📄</button>
-                  )}
+                  {effectiveStatus === 'COMPLETED' && report.pdfUrl && (() => {
+                    const pdfMap = parsePdfUrls(report);
+                    const langs = Object.keys(pdfMap);
+                    const menuId = `view-${report.id}`;
+                    const isOpen = pdfMenu?.id === menuId;
+                    const openMenu = (e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      if (pdfMenuCloseTimer.current) clearTimeout(pdfMenuCloseTimer.current);
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      setPdfMenu({ id: menuId, x: rect.left, y: rect.top - 4 });
+                    };
+                    const scheduleClose = () => {
+                      pdfMenuCloseTimer.current = setTimeout(() => setPdfMenu(null), 150);
+                    };
+                    const cancelClose = () => {
+                      if (pdfMenuCloseTimer.current) clearTimeout(pdfMenuCloseTimer.current);
+                    };
+                    return (
+                      <>
+                        <button
+                          onClick={langs.length === 1
+                            ? (e) => { e.stopPropagation(); handleViewPdf(pdfMap[langs[0]], report); }
+                            : openMenu}
+                          onMouseEnter={langs.length > 1 ? openMenu : undefined}
+                          onMouseLeave={langs.length > 1 ? scheduleClose : undefined}
+                          className="btn-icon"
+                          title={langs.length === 1 ? `View PDF (${langs[0]})` : 'View PDF'}
+                        >📄</button>
+                        {isOpen && createPortal(
+                          <div
+                            className="pdf-menu"
+                            style={{ position: 'fixed', left: pdfMenu!.x, top: pdfMenu!.y, transform: 'translateY(-100%)', zIndex: 9999 }}
+                            onMouseEnter={cancelClose}
+                            onMouseLeave={scheduleClose}
+                          >
+                            <div className="pdf-menu-heading">View</div>
+                            {langs.map(lang => (
+                              <button
+                                key={lang}
+                                className="pdf-menu-item"
+                                onClick={(e) => { e.stopPropagation(); handleViewPdf(pdfMap[lang], report); setPdfMenu(null); }}
+                              >{lang}</button>
+                            ))}
+                          </div>,
+                          document.body
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -1143,23 +1248,59 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             )}
 
             <div className="modal-footer">
-              {selectedReport.status === 'COMPLETED' && selectedReport.pdfUrl && (
-                <>
-                  <button
-                    onClick={() => handleViewPdf(selectedReport.pdfUrl!, selectedReport)}
-                    className="btn btn-primary"
-                    style={{ marginRight: '10px' }}
-                  >
-                    View PDF
-                  </button>
-                  <button
-                    onClick={() => setPolicyDataReport(selectedReport)}
-                    className="btn btn-secondary"
-                    title="View Policy Data JSON"
-                    style={{ marginRight: '10px' }}
-                  >
-                    JSON
-                  </button>
+              {selectedReport.status === 'COMPLETED' && selectedReport.pdfUrl && (() => {
+                const pdfMap = parsePdfUrls(selectedReport);
+                const langs = Object.keys(pdfMap);
+                const menuId = 'modal-view';
+                const isOpen = pdfMenu?.id === menuId;
+                const openMenu = (e: React.MouseEvent) => {
+                  if (pdfMenuCloseTimer.current) clearTimeout(pdfMenuCloseTimer.current);
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setPdfMenu({ id: menuId, x: rect.left, y: rect.top - 4 });
+                };
+                const scheduleClose = () => {
+                  pdfMenuCloseTimer.current = setTimeout(() => setPdfMenu(null), 150);
+                };
+                const cancelClose = () => {
+                  if (pdfMenuCloseTimer.current) clearTimeout(pdfMenuCloseTimer.current);
+                };
+                return (
+                  <>
+                    <button
+                      onClick={langs.length === 1
+                        ? () => handleViewPdf(pdfMap[langs[0]], selectedReport)
+                        : openMenu}
+                      onMouseEnter={langs.length > 1 ? openMenu : undefined}
+                      onMouseLeave={langs.length > 1 ? scheduleClose : undefined}
+                      className="btn btn-primary"
+                      style={{ marginRight: '10px' }}
+                    >View PDF{langs.length > 1 ? ' ▾' : ''}</button>
+                    {isOpen && createPortal(
+                      <div
+                        className="pdf-menu"
+                        style={{ position: 'fixed', left: pdfMenu!.x, top: pdfMenu!.y, transform: 'translateY(-100%)', zIndex: 9999 }}
+                        onMouseEnter={cancelClose}
+                        onMouseLeave={scheduleClose}
+                      >
+                        <div className="pdf-menu-heading">View</div>
+                        {langs.map(lang => (
+                          <button
+                            key={lang}
+                            className="pdf-menu-item"
+                            onClick={() => { handleViewPdf(pdfMap[lang], selectedReport); setPdfMenu(null); }}
+                          >{lang}</button>
+                        ))}
+                      </div>,
+                      document.body
+                    )}
+                    <button
+                      onClick={() => setPolicyDataReport(selectedReport)}
+                      className="btn btn-secondary"
+                      title="View Policy Data JSON"
+                      style={{ marginRight: '10px' }}
+                    >
+                      JSON
+                    </button>
                   <button 
                     onClick={() => {
                       if (selectedReport.policyData) {
@@ -1175,8 +1316,9 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                   >
                     💬 Ask AI
                   </button>
-                </>
-              )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>

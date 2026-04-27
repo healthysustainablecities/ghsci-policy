@@ -14,6 +14,7 @@ const schema = a.schema({
       fileKey: a.string(), // S3 key for uploaded file
       status: a.enum(['UPLOADED', 'PROCESSING', 'COMPLETED', 'FAILED', 'INCOMPLETE']),
       pdfUrl: a.string(),
+      pdfUrls: a.json(), // Language → S3 key dict for multi-language reports
       reportTitle: a.string(),
       collectionDetails: a.string(),
       policyChecklist: a.string(),

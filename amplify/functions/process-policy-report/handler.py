@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'lib'))
 
 import boto3
 import json
+import re
 import time
 import traceback
 from urllib.parse import unquote_plus
@@ -110,6 +111,25 @@ def parse_excel_config(excel_file_path):
                 }
             }
         }
+
+        # Add additional language entries from the xlsx (e.g. Spanish - Spain block)
+        additional_languages = setting.get('additional_languages', {})
+        for lang_name, lang_data in additional_languages.items():
+            config['reporting']['languages'][lang_name] = {
+                'name': lang_data.get('name', city),
+                'country': lang_data.get('country', country),
+                'summary_policy': lang_data.get('summary_policy', ''),
+                'context': [
+                    {'City context': [{'summary': lang_data.get('city_context', '')}]},
+                    {'Demographics and health equity': [{'summary': lang_data.get('demographics', '')}]},
+                    {'Environmental disaster context': [{'summary': env_disaster if env_disaster else ''}]},
+                    {'Levels of government': [{'summary': gov_levels if gov_levels and gov_levels != 'Not specified' else ''}]},
+                ]
+            }
+            print(f"Added additional language to config: {lang_name}")
+
+        # Set selectedLanguages: English always first, then any additional xlsx languages
+        config['reporting']['selectedLanguages'] = ['English'] + list(additional_languages.keys())
         
         print(f'Generated config: {json.dumps(config, indent=2)}')
         print(f'Config summary: City={city}, Country={country}, Region={region}')
@@ -273,7 +293,7 @@ def get_table():
         raise ValueError("POLICY_REPORT_TABLE environment variable not set")
     return dynamodb.Table(table_name)
 
-def update_report_status(file_key, status, pdf_url=None, error_message=None):
+def update_report_status(file_key, status, pdf_url=None, error_message=None, pdf_urls=None):
     """Update the PolicyReport record in DynamoDB with retry logic"""
     max_retries = 5
     retry_delay = 1  # Start with 1 second
@@ -282,6 +302,7 @@ def update_report_status(file_key, status, pdf_url=None, error_message=None):
     print(f"  file_key: {file_key}")
     print(f"  status: {status}")
     print(f"  pdf_url: {pdf_url}")
+    print(f"  pdf_urls: {pdf_urls}")
     print(f"  error_message: {error_message}")
     print(f"  error_message type: {type(error_message)}")
     print(f"  error_message repr: {repr(error_message)}")
@@ -338,6 +359,9 @@ def update_report_status(file_key, status, pdf_url=None, error_message=None):
                 if pdf_url:
                     update_expr += ', pdfUrl = :pdfUrl'
                     expr_values[':pdfUrl'] = pdf_url
+                if pdf_urls:
+                    update_expr += ', pdfUrls = :pdfUrls'
+                    expr_values[':pdfUrls'] = json.dumps(pdf_urls)
             elif status == 'FAILED':
                 if error_message:
                     print(f"Adding error message to update: {repr(error_message)}")
@@ -643,35 +667,68 @@ def process_report(bucket, key, report_config=None):
         print(f"Traceback: {traceback.format_exc()}")
         # Don't fail the entire process if policy data extraction fails
 
-    # Generate PDF report
-    try:
-        print("Generating PDF report...")
-        pdf = generate_online_policy_report(checklist_file_path, bucket, report_config=report_config)
-        
-        if pdf is None:
-            raise RuntimeError("generate_online_policy_report returned None")
-        
-        print("PDF generated successfully, writing to file...")
-        pdf.output(pdf_local_path)
-        print(f"PDF written to {pdf_local_path}")
-    except Exception as e:
-        raise RuntimeError(f"Failed to generate PDF report: {str(e)}")
+    # Determine which languages to generate reports for
+    selected_languages = (
+        report_config.get('reporting', {}).get('selectedLanguages', ['English'])
+        if report_config else ['English']
+    )
+    if not selected_languages:
+        selected_languages = ['English']
+    if 'English' not in selected_languages:
+        selected_languages = ['English'] + selected_languages
 
-    # Upload PDF back to S3
-    try:
-        print(f"Uploading PDF to S3...")
-        s3_client.upload_file(
-            pdf_local_path, 
-            bucket, 
-            s3_upload_key
-        )
-        print(f"Successfully uploaded PDF to {s3_upload_key}")
-    except Exception as e:
-        raise RuntimeError(f"Failed to upload PDF to S3: {str(e)}")
+    # If report_config had no explicit selectedLanguages, also include any
+    # additional languages declared in the xlsx itself (e.g. "Spanish - Spain" block).
+    explicit_selection = (
+        report_config.get('reporting', {}).get('selectedLanguages')
+        if report_config else None
+    )
+    if not explicit_selection:
+        for xl_lang in policy_setting.get('additional_languages', {}).keys():
+            if xl_lang not in selected_languages:
+                selected_languages.append(xl_lang)
+                print(f"Auto-adding language from xlsx: {xl_lang}")
+
+    print(f"Generating reports for languages: {selected_languages}")
+
+    # Generate one PDF per language, collect S3 keys
+    pdf_urls = {}
+    first_upload_key = None
+    for lang in selected_languages:
+        try:
+            print(f"Generating PDF report for language: {lang}")
+            lang_pdf = generate_online_policy_report(
+                checklist_file_path,
+                bucket,
+                options={'language': lang},
+                report_config=report_config,
+            )
+            if lang_pdf is None:
+                print(f"Warning: generate_online_policy_report returned None for language '{lang}', skipping")
+                continue
+            lang_slug = re.sub(r'[^\w]+', '-', lang).strip('-').lower()
+            lang_pdf_name = f'{file_basename}-{lang_slug}.pdf'
+            lang_pdf_local = f'/tmp/{lang_pdf_name}'
+            lang_s3_key = f'public/reports/{lang_pdf_name}'
+            lang_pdf.output(lang_pdf_local)
+            print(f"PDF written to {lang_pdf_local}")
+            s3_client.upload_file(lang_pdf_local, bucket, lang_s3_key)
+            print(f"Uploaded {lang} PDF to {lang_s3_key}")
+            pdf_urls[lang] = lang_s3_key
+            if first_upload_key is None:
+                first_upload_key = lang_s3_key
+        except Exception as e:
+            print(f"Warning: Failed to generate/upload PDF for language '{lang}': {str(e)}")
+            traceback.print_exc()
+
+    if not pdf_urls:
+        raise RuntimeError("No PDF reports were successfully generated for any language")
+
+    primary_url = pdf_urls.get('English', first_upload_key)
 
     # Update database record with COMPLETED status
     try:
-        update_report_status(key, 'COMPLETED', pdf_url=s3_upload_key)
+        update_report_status(key, 'COMPLETED', pdf_url=primary_url, pdf_urls=pdf_urls)
         print(f"File {key} processed successfully")
     except Exception as e:
         raise RuntimeError(f"Failed to update status to COMPLETED: {str(e)}")
@@ -768,37 +825,59 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
         import traceback
         print(f"Traceback: {traceback.format_exc()}")
 
-    # Generate PDF directly from form data.
-    try:
-        print("Generating PDF report from form data...")
-        options = {'language': 'English'}
-        pdf = generate_online_policy_report_from_form_data(
-            collection_details=collection_details,
-            form_policies=form_policies,
-            bucket=bucket,
-            options=options,
-            report_config=report_config,
-        )
-        if pdf is None:
-            raise RuntimeError("generate_online_policy_report_from_form_data returned None")
-        print("PDF generated successfully, writing to file...")
-        pdf.output(pdf_local_path)
-        print(f"PDF written to {pdf_local_path}")
-    except Exception as e:
-        update_report_status(synthetic_key, 'FAILED', error_message=str(e))
-        raise RuntimeError(f"Failed to generate PDF report: {str(e)}")
+    # Determine which languages to generate reports for
+    selected_languages = (
+        report_config.get('reporting', {}).get('selectedLanguages', ['English'])
+        if report_config else ['English']
+    )
+    if not selected_languages:
+        selected_languages = ['English']
+    if 'English' not in selected_languages:
+        selected_languages = ['English'] + selected_languages
+    print(f"Generating reports for languages: {selected_languages}")
 
-    # Upload PDF to S3.
-    try:
-        print(f"Uploading PDF to S3...")
-        s3_client.upload_file(pdf_local_path, bucket, s3_upload_key)
-        print(f"Successfully uploaded PDF to {s3_upload_key}")
-    except Exception as e:
-        raise RuntimeError(f"Failed to upload PDF to S3: {str(e)}")
+    # Generate one PDF per language, collect S3 keys
+    import re as _re
+    pdf_urls = {}
+    first_upload_key = None
+    for lang in selected_languages:
+        try:
+            print(f"Generating PDF report for language: {lang}")
+            lang_pdf = generate_online_policy_report_from_form_data(
+                collection_details=collection_details,
+                form_policies=form_policies,
+                bucket=bucket,
+                options={'language': lang},
+                report_config=report_config,
+            )
+            if lang_pdf is None:
+                print(f"Warning: generate_online_policy_report_from_form_data returned None for language '{lang}', skipping")
+                continue
+            lang_slug = _re.sub(r'[^\w]+', '-', lang).strip('-').lower()
+            lang_pdf_name = f'{file_basename}-{lang_slug}.pdf'
+            lang_pdf_local = f'/tmp/{lang_pdf_name}'
+            lang_s3_key = f'public/reports/{lang_pdf_name}'
+            lang_pdf.output(lang_pdf_local)
+            print(f"PDF written to {lang_pdf_local}")
+            s3_client.upload_file(lang_pdf_local, bucket, lang_s3_key)
+            print(f"Uploaded {lang} PDF to {lang_s3_key}")
+            pdf_urls[lang] = lang_s3_key
+            if first_upload_key is None:
+                first_upload_key = lang_s3_key
+        except Exception as e:
+            print(f"Warning: Failed to generate/upload PDF for language '{lang}': {str(e)}")
+            import traceback as _tb
+            _tb.print_exc()
+
+    if not pdf_urls:
+        update_report_status(synthetic_key, 'FAILED', error_message='No PDF reports were successfully generated for any language')
+        raise RuntimeError("No PDF reports were successfully generated for any language")
+
+    primary_url = pdf_urls.get('English', first_upload_key)
 
     # Mark as COMPLETED.
     try:
-        update_report_status(synthetic_key, 'COMPLETED', pdf_url=s3_upload_key)
+        update_report_status(synthetic_key, 'COMPLETED', pdf_url=primary_url, pdf_urls=pdf_urls)
         print(f"Form submission {synthetic_key} processed successfully")
     except Exception as e:
         raise RuntimeError(f"Failed to update status to COMPLETED: {str(e)}")

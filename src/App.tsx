@@ -99,6 +99,23 @@ function App() {
             if (item.status === 'PROCESSING' && processingOverrideIds.current.has(item.id)) {
               processingOverrideIds.current.delete(item.id);
             }
+            // Amplify subscriptions only carry fields written via GraphQL mutations.
+            // The Lambda writes pdfUrls, pdfUrl, reportConfig etc. directly to DynamoDB,
+            // so subscription items arrive with those fields as null, overwriting the
+            // correct values fetched by list(). Preserve any non-null previous values
+            // for fields the subscription is pushing as null.
+            if (prev) {
+              const preserved: Partial<typeof item> = {};
+              const fieldsToPreserve = ['pdfUrl', 'pdfUrls', 'reportConfig', 'initialReportConfig', 'policyData', 'reportTitle', 'errorMessage'] as const;
+              for (const field of fieldsToPreserve) {
+                if (prev[field] != null && item[field] == null) {
+                  (preserved as any)[field] = prev[field];
+                }
+              }
+              if (Object.keys(preserved).length > 0) {
+                return { ...item, ...preserved };
+              }
+            }
             return item;
           });
           return [...merged].sort((a, b) =>
@@ -136,7 +153,9 @@ function App() {
 
   const fetchReports = async () => {
     try {
-      const { data } = await client.models.PolicyReport.list();
+      const { data } = await client.models.PolicyReport.list({
+        selectionSet: ['id', 'fileName', 'fileKey', 'status', 'pdfUrl', 'pdfUrls', 'reportTitle', 'collectionDetails', 'policyChecklist', 'reportConfig', 'initialReportConfig', 'policyData', 'fileSize', 'errorMessage', 'uploadedAt', 'processedAt', 'completedAt', 'createdAt', 'updatedAt'],
+      });
       // Deduplicate by id before setting state
       const deduped = Array.from(new Map(data.map(item => [item.id, item])).values());
       setReports([...deduped].sort((a, b) =>
@@ -194,6 +213,26 @@ function App() {
           console.log('Deleted PDF file:', report.pdfUrl);
         } catch (err) {
           console.error('Failed to delete PDF file:', err);
+        }
+      }
+
+      if (report.pdfUrls) {
+        try {
+          const urlsMap = typeof report.pdfUrls === 'string' ? JSON.parse(report.pdfUrls) : report.pdfUrls;
+          if (urlsMap && typeof urlsMap === 'object') {
+            for (const s3Key of Object.values(urlsMap as Record<string, string>)) {
+              if (s3Key && s3Key !== report.pdfUrl) {
+                try {
+                  await remove({ path: s3Key });
+                  console.log('Deleted PDF file:', s3Key);
+                } catch (err) {
+                  console.error('Failed to delete PDF file:', s3Key, err);
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Failed to parse pdfUrls for cleanup:', err);
         }
       }
 

@@ -8,6 +8,7 @@ const client = generateClient<Schema>();
 export interface ReportConfig {
   reporting?: {
     doi?: string;
+    selectedLanguages?: string[];
     images?: {
       [key: string]: {
         file?: string;
@@ -16,7 +17,7 @@ export interface ReportConfig {
       };
     };
     languages?: {
-      English?: {
+      [language: string]: {
         name?: string;
         country?: string;
         summary_policy?: string;
@@ -30,6 +31,40 @@ export interface ReportConfig {
     custom_text_box_fontsize?: number; // Optional custom font size for report blurb, e.g. 11 for 11px
   };
 }
+
+const AVAILABLE_LANGUAGES: Array<{ name: string; validated: boolean }> = [
+  { name: 'English', validated: true },
+  { name: 'Arabic (عربي)', validated: true },
+  { name: 'Catalan (Català)', validated: true },
+  { name: 'Chinese - Simplified (简体中文)', validated: true },
+  { name: 'Chinese - Traditional (繁體中文)', validated: true },
+  { name: 'Croation (Hrvatski)', validated: false },
+  { name: 'Czech (Čeština)', validated: false },
+  { name: 'Danish (Dansk)', validated: false },
+  { name: 'Dutch (Nederlands)', validated: false },
+  { name: 'Finnish (Suomi)', validated: false },
+  { name: 'French (Française)', validated: false },
+  { name: 'German (Deutsch)', validated: false },
+  { name: 'Greek (Αγγλικά)', validated: false },
+  { name: 'Hausa (Hausa)', validated: false },
+  { name: 'Hindi (हिंदी)', validated: false },
+  { name: 'Indonesian (bahasa Indonesia)', validated: false },
+  { name: 'Italian (Italiano)', validated: true },
+  { name: 'Japanese (日本語)', validated: true },
+  { name: 'Korean (한국인)', validated: false },
+  { name: 'Māori (Māori)', validated: false },
+  { name: 'Nepali (नेपाली)', validated: false },
+  { name: 'Persian (فارسی)', validated: false },
+  { name: 'Portuguese - Brazil (Português do Brasil)', validated: true },
+  { name: 'Portuguese - Portugal (Português de Portugal)', validated: true },
+  { name: 'Spanish - Latin America (Español de Latinoamerica)', validated: true },
+  { name: 'Spanish - Spain (Español de España)', validated: true },
+  { name: 'Tamil (தமிழ்)', validated: false },
+  { name: 'Thai (ภาษา\u200bไทย)', validated: false },
+  { name: 'Turkish (Türkçe)', validated: true },
+  { name: 'Ukrainian (Український)', validated: false },
+  { name: 'Vietnamese (Tiếng Việt)', validated: true },
+];
 
 interface ReportSettingsProps {
   report: any;
@@ -91,6 +126,12 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
   const [imagePreviews, setImagePreviews] = useState<{ [key: string]: string }>({});
   const [dragActive, setDragActive] = useState<string | null>(null);
   const [imageUrls, setImageUrls] = useState<{ [key: string]: string }>({});
+  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
+
+  // Derive selected languages directly from config to keep a single source of truth
+  const selectedLanguages: string[] = config.reporting?.selectedLanguages?.length
+    ? config.reporting.selectedLanguages
+    : ['English'];
 
   useEffect(() => {
     // Load existing config from report if available
@@ -113,6 +154,7 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
         const loadedConfig = {
           reporting: {
             doi: existingConfig?.reporting?.doi || '',
+            selectedLanguages: existingConfig?.reporting?.selectedLanguages || ['English'],
             images: existingConfig?.reporting?.images || config.reporting?.images || {},
             languages: existingConfig?.reporting?.languages || config.reporting?.languages || {},
             custom_text_box_fontsize: existingConfig?.reporting?.custom_text_box_fontsize || 12
@@ -276,8 +318,41 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
     });
   };
 
-  const handleRevert = async () => {
-    try {
+  // ---- language management helpers ----
+
+  const defaultLangEntry = (_lang: string) => {
+    const englishEntry = config.reporting?.languages?.['English'] || {};
+    return {
+      name: englishEntry.name || '',
+      country: englishEntry.country || '',
+      summary_policy: '',
+      context: [
+        { 'City context': [{ summary: '' }] },
+        { 'Demographics and health equity': [{ summary: '' }] },
+        { 'Environmental disaster context': [{ summary: englishEntry.context?.find(c => 'Environmental disaster context' in c)?.['Environmental disaster context']?.[0]?.summary || '' }] },
+        { 'Levels of government': [{ summary: englishEntry.context?.find(c => 'Levels of government' in c)?.['Levels of government']?.[0]?.summary || '' }] },
+      ],
+    };
+  };
+
+  const toggleLanguage = (lang: string) => {
+    if (lang === 'English') return; // English is always selected
+    const current = config.reporting?.selectedLanguages || ['English'];
+    const isSelected = current.includes(lang);
+    let next: string[];
+    if (isSelected) {
+      next = current.filter(l => l !== lang);
+    } else {
+      next = [...current, lang];
+      // Pre-populate entry if not yet present
+      if (!config.reporting?.languages?.[lang]) {
+        updateConfig(['reporting', 'languages', lang], defaultLangEntry(lang));
+      }
+    }
+    updateConfig(['reporting', 'selectedLanguages'], next);
+  };
+
+  const handleRevert = async () => {    try {
       console.log('Reverting to initial config...');
       const { data: freshReport } = await client.models.PolicyReport.get({ id: report.id });
       
@@ -303,33 +378,40 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
 
   const renderSummary = () => {
     const doi = config.reporting?.doi || 'https://doi.org/10.6084/m9.figshare.c.8339173';
-    const city = config.reporting?.languages?.English?.name || 'Not specified';
-    const country = config.reporting?.languages?.English?.country || 'Not specified';
     const images = config.reporting?.images || {};
-    
+    const langs = selectedLanguages;
+
     return (
       <div className="settings-summary" translate="no">
-        <div className="summary-item"><strong>City:</strong> {city}</div>
-        <div className="summary-item"><strong>Country:</strong> {country}</div>
-        {config.reporting?.languages?.English?.context?.filter((item) => {
-          const key = Object.keys(item)[0];
-          // Exclude auto-populated fields from Excel
-          return key !== 'Environmental disaster context' && key !== 'Levels of government';
-        }).map((item, idx) => {
-          const key = Object.keys(item)[0];
-          const summary = item[key][0]?.summary || 'Not set';
+        {langs.map(lang => {
+          const langData = config.reporting?.languages?.[lang];
+          if (!langData) return null;
           return (
-            <div key={idx} className="summary-item">
-              <strong>{key}</strong> <div className="summary-text">{summary}</div>
+            <div key={lang} className="summary-lang-section">
+              <div className="summary-lang-header">{lang}</div>
+              <div className="summary-item"><strong>City:</strong> {langData.name || 'Not specified'}</div>
+              <div className="summary-item"><strong>Country:</strong> {langData.country || 'Not specified'}</div>
+              {langData.context?.filter(item => {
+                const key = Object.keys(item)[0];
+                return key !== 'Environmental disaster context' && key !== 'Levels of government';
+              }).map((item, idx) => {
+                const key = Object.keys(item)[0];
+                const summary = item[key][0]?.summary || 'Not set';
+                return (
+                  <div key={idx} className="summary-item">
+                    <strong>{key}:</strong> <div className="summary-text">{summary}</div>
+                  </div>
+                );
+              })}
+              <div className="summary-item">
+                <strong>Summary:</strong>
+                <div className="summary-text">{langData.summary_policy || 'Not set'}</div>
+              </div>
             </div>
           );
         })}
         <div className="summary-item">
-          <strong>Policy summary:</strong>
-          <div className="summary-text">{config.reporting?.languages?.English?.summary_policy || 'Not set'}</div>
-        </div>
-        <div className="summary-item">
-          <strong>Custom text box font size</strong> {config.reporting?.custom_text_box_fontsize ?? 12}
+          <strong>Custom text box font size:</strong> {config.reporting?.custom_text_box_fontsize ?? 12}
         </div>
         {['1', '2', '3', '4'].map(num => {
           const img = images[num];
@@ -340,10 +422,10 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
               {hasImage ? (
                 <div className="summary-image-content">
                   {imageUrls[num] || imagePreviews[num] ? (
-                    <img 
-                      src={imageUrls[num] || imagePreviews[num]} 
-                      alt={`Image ${num}`} 
-                      className="summary-thumbnail" 
+                    <img
+                      src={imageUrls[num] || imagePreviews[num]}
+                      alt={`Image ${num}`}
+                      className="summary-thumbnail"
                     />
                   ) : null}
                   <div className="summary-image-info">
@@ -366,63 +448,121 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
     );
   };
 
+  const renderLangFields = (lang: string) => {
+    const langData = config.reporting?.languages?.[lang] || {};
+    return (
+      <div key={lang} className="settings-lang-section">
+        <div className="settings-lang-header">
+          Language (in English): <strong>{lang}</strong>
+          {AVAILABLE_LANGUAGES.find(x => x.name === lang)?.validated === false && (
+            <span className="lang-draft-badge"> (draft translation)</span>
+          )}
+        </div>
+
+        <label className="settings-field">
+          <span>City Name</span>
+          <input
+            type="text"
+            value={langData.name || ''}
+            onChange={(e) => updateConfig(['reporting', 'languages', lang, 'name'], e.target.value)}
+          />
+        </label>
+
+        <label className="settings-field">
+          <span>Country</span>
+          <input
+            type="text"
+            value={langData.country || ''}
+            onChange={(e) => updateConfig(['reporting', 'languages', lang, 'country'], e.target.value)}
+          />
+        </label>
+
+        {(langData.context || []).filter(item => {
+          const key = Object.keys(item)[0];
+          return key !== 'Environmental disaster context' && key !== 'Levels of government';
+        }).map((item) => {
+          const key = Object.keys(item)[0];
+          const data = item[key][0];
+          const actualIdx = (langData.context || []).findIndex(ctx => Object.keys(ctx)[0] === key);
+          return (
+            <label key={actualIdx} className="settings-field">
+              <span>{key}</span>
+              <textarea
+                rows={3}
+                value={data?.summary || ''}
+                onChange={(e) => {
+                  const newContext = JSON.parse(JSON.stringify(langData.context || []));
+                  if (!newContext[actualIdx]) return;
+                  newContext[actualIdx][key][0].summary = e.target.value;
+                  updateConfig(['reporting', 'languages', lang, 'context'], newContext);
+                }}
+              />
+            </label>
+          );
+        })}
+
+        <label className="settings-field">
+          <span>Summary</span>
+          <textarea
+            rows={4}
+            value={langData.summary_policy || ''}
+            onChange={(e) => updateConfig(['reporting', 'languages', lang, 'summary_policy'], e.target.value)}
+          />
+        </label>
+      </div>
+    );
+  };
+
   const renderEditForm = () => {
+    const validatedLangs = AVAILABLE_LANGUAGES.filter(l => l.validated);
+    const draftLangs = AVAILABLE_LANGUAGES.filter(l => !l.validated);
+
     return (
       <div className="settings-content">
         <div className="settings-section">
 
-          <label className="settings-field">
-            <span>City Name</span>
-            <input
-              type="text"
-              value={config.reporting?.languages?.English?.name || ''}
-              onChange={(e) => updateConfig(['reporting', 'languages', 'English', 'name'], e.target.value)}
-            />
-          </label>
-          
-          <label className="settings-field">
-            <span>Country</span>
-            <input
-              type="text"
-              value={config.reporting?.languages?.English?.country || ''}
-              onChange={(e) => updateConfig(['reporting', 'languages', 'English', 'country'], e.target.value)}
-            />
-          </label>
+          {/* ── Language selector ── */}
+          <div className="settings-field">
+            <span>Report languages</span>
+            <button
+              type="button"
+              className="btn-text"
+              onClick={() => setShowLanguagePicker(v => !v)}
+            >
+              {showLanguagePicker ? 'Hide language list ▲' : 'Add / remove languages ▼'}
+            </button>
+            {showLanguagePicker && (
+              <div className="language-picker">
+                <div className="lang-group-label">Validated translations</div>
+                {validatedLangs.map(l => (
+                  <label key={l.name} className="lang-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedLanguages.includes(l.name)}
+                      disabled={l.name === 'English'}
+                      onChange={() => toggleLanguage(l.name)}
+                    />
+                    {l.name}
+                  </label>
+                ))}
+                <div className="lang-group-label" style={{ marginTop: '8px' }}>Draft translations</div>
+                {draftLangs.map(l => (
+                  <label key={l.name} className="lang-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedLanguages.includes(l.name)}
+                      onChange={() => toggleLanguage(l.name)}
+                    />
+                    {l.name}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
 
-          {config.reporting?.languages?.English?.context?.filter((item) => {
-            const key = Object.keys(item)[0];
-            // Exclude auto-populated fields from Excel
-            return key !== 'Environmental disaster context' && key !== 'Levels of government';
-          }).map((item, idx) => {
-            const key = Object.keys(item)[0];
-            const data = item[key][0];
-            // Find the actual index in the original context array
-            const actualIdx = config.reporting?.languages?.English?.context?.findIndex(ctx => Object.keys(ctx)[0] === key) || idx;
-            return (
-              <label key={actualIdx} className="settings-field">
-                <span>{key}</span>
-                <textarea
-                  rows={3}
-                  value={data.summary || ''}
-                  onChange={(e) => {
-                    const newContext = [...(config.reporting?.languages?.English?.context || [])];
-                    newContext[actualIdx][key][0].summary = e.target.value;
-                    updateConfig(['reporting', 'languages', 'English', 'context'], newContext);
-                  }}
-                />
-              </label>
-            );
-          })}
+          {/* ── Per-language content fields ── */}
+          {selectedLanguages.map(lang => renderLangFields(lang))}
 
-          <label className="settings-field">
-            <span>Policy summary</span>
-            <textarea
-              rows={4}
-              value={config.reporting?.languages?.English?.summary_policy || ''}
-              onChange={(e) => updateConfig(['reporting', 'languages', 'English', 'summary_policy'], e.target.value)}
-            />
-          </label>
-          
           <label className="settings-field">
             <span>Custom text box font size</span>
             <input
@@ -437,9 +577,9 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
 
           {['1', '2', '3', '4'].map(num => (
             <div key={num} className="image-upload-item">
-              <label>Image {num} {parseInt(num) in [1, 2] ? '(Landscape; 21:10 ratio, e.g. 2100px × 1000px)' : '(Square; 1:1 ratio, e.g. 1000px × 1000px)'}</label>
-              
-              <div 
+              <label>Image {num} {parseInt(num) <= 2 ? '(Landscape; 21:10 ratio, e.g. 2100px × 1000px)' : '(Square; 1:1 ratio, e.g. 1000px × 1000px)'}</label>
+
+              <div
                 className={`image-dropzone ${dragActive === num ? 'drag-active' : ''}`}
                 onDragEnter={(e) => handleDrag(e, num)}
                 onDragLeave={(e) => handleDrag(e, num)}
@@ -469,7 +609,7 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
                   </div>
                 )}
               </div>
-              
+
               <input
                 id={`file-input-${num}`}
                 type="file"
@@ -481,7 +621,7 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
                 disabled={uploadingImage === num}
                 style={{ display: 'none' }}
               />
-              
+
               <label className="credit-label">Credit</label>
               <input
                 type="text"
@@ -490,7 +630,6 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
                 onChange={(e) => updateConfig(['reporting', 'images', num, 'credit'], e.target.value)}
               />
 
-              
               <label className="settings-field">
                 <span>DOI (optional)</span>
                 <input

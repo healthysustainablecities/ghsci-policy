@@ -365,6 +365,28 @@ def generate_online_policy_report(
     config['reporting']['exceptions'][language]['author_names'] = (
         policy_setting['Person(s)']
     )
+
+    # Populate config for any additional languages declared in the xlsx
+    # (e.g. a "Spanish - Spain" block in Collection details).  Only sets
+    # values that haven't already been provided via report_config so the UI
+    # overrides always take priority.
+    for add_lang, add_data in policy_setting.get('additional_languages', {}).items():
+        if add_lang not in config['reporting']['languages']:
+            config['reporting']['languages'][add_lang] = {}
+        if add_lang not in config['reporting']['exceptions']:
+            config['reporting']['exceptions'][add_lang] = {}
+        lang_cfg = config['reporting']['languages'][add_lang]
+        lang_cfg.setdefault('name', add_data.get('name', policy_setting['City']))
+        lang_cfg.setdefault('country', add_data.get('country', policy_setting['Country']))
+        lang_cfg.setdefault('summary_policy', add_data.get('summary_policy', ''))
+        if 'context' not in lang_cfg:
+            lang_cfg['context'] = [
+                {'City context': [{'summary': add_data.get('city_context', '')}]},
+                {'Demographics and health equity': [{'summary': add_data.get('demographics', '')}]},
+                {'Environmental disaster context': [{'summary': ''}]},
+                {'Levels of government': [{'summary': ''}]},
+            ]
+
     # Parse the checklist once and cache in config for downstream PDF functions.
     audit = get_policy_checklist(checklist, setting=policy_setting)
     config['policy_setting'] = policy_setting
@@ -1446,6 +1468,40 @@ def get_policy_setting(xlsx) -> dict:
                 setting['Demographics and health equity'] = ''
         else:
             setting['Demographics and health equity'] = ''
+        # Extract additional language details from "Language (in English):" blocks.
+        # Pattern: Column A = "Language (in English):", Column B = language name.
+        # Subsequent rows have Column A = field label (City, Country, etc.), Column C = value.
+        additional_languages = {}
+        lang_header_mask = (
+            df['item'].str.strip().str.lower() == 'language (in english):'
+        )
+        lang_header_indices = df.index[lang_header_mask].tolist()
+        for i, h_idx in enumerate(lang_header_indices):
+            lang_name = str(df.at[h_idx, 'location']).strip()
+            if not lang_name or lang_name in ('nan', 'NaN', ''):
+                continue
+            # Rows in this block: from h_idx+1 to before the next language header (or end of df)
+            next_h = lang_header_indices[i + 1] if i + 1 < len(lang_header_indices) else len(df)
+            block = df.loc[h_idx + 1 : next_h - 1]
+            field_map = {
+                'city': 'name',
+                'state/province/county/region': 'region',
+                'country': 'country',
+                'city context': 'city_context',
+                'demographics and health equity': 'demographics',
+                'summary': 'summary_policy',
+            }
+            lang_entry = {}
+            for _, row in block.iterrows():
+                item_key = str(row['item']).strip().lower() if pd.notna(row['item']) else ''
+                val = row['value']
+                if item_key in field_map and pd.notna(val) and str(val).strip() not in ('', 'nan', 'NaN'):
+                    lang_entry[field_map[item_key]] = str(val).strip()
+            if lang_entry:
+                additional_languages[lang_name] = lang_entry
+                print(f"  Parsed additional language: {lang_name} → {list(lang_entry.keys())}")
+        setting['additional_languages'] = additional_languages
+
         for x in setting:
             if setting[x] == '':
                 setting[x] = 'Not specified'
