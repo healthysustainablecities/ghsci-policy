@@ -1148,12 +1148,12 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             {scores && (
               <div className="modal-scores">
                 <div className="score-box">
-                  <div className="score-box-label">Policy presence</div>
+                  <div className="score-box-label">{t('presence_text', 'Policy presence')}</div>
                   <div className="score-box-pct">{pct(scores.presence.numerator, scores.presence.denominator)}</div>
                   <div className="score-box-detail">{scores.presence.numerator} of {scores.presence.denominator} measures identified</div>
                 </div>
                 <div className="score-box">
-                  <div className="score-box-label">Policy quality</div>
+                  <div className="score-box-label">{t('quality_text', 'Policy quality')}</div>
                   <div className="score-box-pct">{pct(scores.quality.numerator, scores.quality.denominator)}</div>
                   <div className="score-box-detail">Score: {scores.quality.numerator.toFixed(1)} / {scores.quality.denominator}</div>
                 </div>
@@ -1171,7 +1171,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                         key={lang}
                         className={`checklist-lang-btn${resultsLang === lang ? ' active' : ''}`}
                         onClick={() => { setResultsLang(lang); setExpandedIndicator(null); setExpandedMeasure(null); }}
-                      >{lang}</button>
+                      >{getContextLabels(lang)['language'] || lang}</button>
                     ))}
                   </div>
                 )}

@@ -739,6 +739,17 @@ def process_report(bucket, key, report_config=None):
                     context_labels[category] = phrases.get(category, category)
                     for measure in measures:
                         context_labels[measure] = phrases.get(measure, measure)
+                # 'Climate disaster risk reduction policies' has no matching phrase key;
+                # override with the shorter available key after the loop.
+                context_labels['Climate disaster risk reduction policies'] = phrases.get(
+                    'Climate disaster risk reduction',
+                    context_labels.get('Climate disaster risk reduction policies', 'Climate disaster risk reduction policies')
+                )
+                # Score box labels
+                context_labels['presence_text'] = phrases.get('presence_text', 'Policy presence')
+                context_labels['quality_text'] = phrases.get('quality_text', 'Policy quality')
+                # Self-name of this language (for language toggle button labels in the UI)
+                context_labels['language'] = phrases.get('language', lang)
                 if report_config is None:
                     report_config = {}
                 report_config.setdefault('reporting', {}).setdefault('languages', {}).setdefault(lang, {})['contextLabels'] = context_labels
@@ -925,6 +936,17 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
                     context_labels[category] = phrases.get(category, category)
                     for measure in measures:
                         context_labels[measure] = phrases.get(measure, measure)
+                # 'Climate disaster risk reduction policies' has no matching phrase key;
+                # override with the shorter available key after the loop.
+                context_labels['Climate disaster risk reduction policies'] = phrases.get(
+                    'Climate disaster risk reduction',
+                    context_labels.get('Climate disaster risk reduction policies', 'Climate disaster risk reduction policies')
+                )
+                # Score box labels
+                context_labels['presence_text'] = phrases.get('presence_text', 'Policy presence')
+                context_labels['quality_text'] = phrases.get('quality_text', 'Policy quality')
+                # Self-name of this language (for language toggle button labels in the UI)
+                context_labels['language'] = phrases.get('language', lang)
                 if report_config is None:
                     report_config = {}
                 report_config.setdefault('reporting', {}).setdefault('languages', {}).setdefault(lang, {})['contextLabels'] = context_labels
