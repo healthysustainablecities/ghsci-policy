@@ -21,6 +21,8 @@ from ghsci import (
     policy_data_setup,
     get_policy_presence_quality_score_dictionary,
     get_raw_policy_details,
+    get_phrases,
+    ghsci_policies,
 )
 
 s3_client = boto3.client('s3')
@@ -677,17 +679,15 @@ def process_report(bucket, key, report_config=None):
     if 'English' not in selected_languages:
         selected_languages = ['English'] + selected_languages
 
-    # If report_config had no explicit selectedLanguages, also include any
-    # additional languages declared in the xlsx itself (e.g. "Spanish - Spain" block).
-    explicit_selection = (
-        report_config.get('reporting', {}).get('selectedLanguages')
-        if report_config else None
-    )
-    if not explicit_selection:
-        for xl_lang in policy_setting.get('additional_languages', {}).keys():
-            if xl_lang not in selected_languages:
-                selected_languages.append(xl_lang)
-                print(f"Auto-adding language from xlsx: {xl_lang}")
+    # Always merge any additional languages declared in the xlsx (e.g. "Spanish - Spain"
+    # block). The xlsx is the source of truth for which languages are configured, so these
+    # are added on top of any user-configured selectedLanguages from the saved reportConfig.
+    # This ensures that reports saved before additional-language support was introduced still
+    # generate all configured language PDFs on regeneration.
+    for xl_lang in policy_setting.get('additional_languages', {}).keys():
+        if xl_lang not in selected_languages:
+            selected_languages.append(xl_lang)
+            print(f"Auto-adding language from xlsx: {xl_lang}")
 
     print(f"Generating reports for languages: {selected_languages}")
 
@@ -717,6 +717,34 @@ def process_report(bucket, key, report_config=None):
             pdf_urls[lang] = lang_s3_key
             if first_upload_key is None:
                 first_upload_key = lang_s3_key
+            # Extract translated UI labels from phrases and store in reportConfig so
+            # the frontend can display section headings, summary label, and policy
+            # checklist category/measure names in the configured language.
+            try:
+                phrases = get_phrases(lang)
+                context_labels = {
+                    # Report settings section headings
+                    'City context': phrases.get('City context', 'City context'),
+                    'Demographics and health equity': phrases.get('Demographics and health equity', 'Demographics and health equity'),
+                    'Environmental disaster context': phrases.get('Environmental disaster context', 'Environmental disaster context'),
+                    'Levels of government': phrases.get('Levels of government', 'Levels of government'),
+                    'executive_summary': phrases.get('executive_summary', 'Summary'),
+                    # Policy checklist table column headers
+                    'Policy identified': phrases.get('Policy identified', 'Identified'),
+                    'Aligns with healthy cities principles': phrases.get('Aligns with healthy cities principles', 'Aligns'),
+                    'Measurable target': phrases.get('Measurable target', 'Measurable target'),
+                }
+                # Add translations for all policy category names and measure names
+                for category, measures in ghsci_policies['Checklist'].items():
+                    context_labels[category] = phrases.get(category, category)
+                    for measure in measures:
+                        context_labels[measure] = phrases.get(measure, measure)
+                if report_config is None:
+                    report_config = {}
+                report_config.setdefault('reporting', {}).setdefault('languages', {}).setdefault(lang, {})['contextLabels'] = context_labels
+                print(f"Stored contextLabels for language '{lang}'")
+            except Exception as label_err:
+                print(f"Warning: Could not extract contextLabels for language '{lang}': {label_err}")
         except Exception as e:
             print(f"Warning: Failed to generate/upload PDF for language '{lang}': {str(e)}")
             traceback.print_exc()
@@ -725,6 +753,17 @@ def process_report(bucket, key, report_config=None):
         raise RuntimeError("No PDF reports were successfully generated for any language")
 
     primary_url = pdf_urls.get('English', first_upload_key)
+
+    # Persist updated reportConfig (now containing contextLabels per language and the
+    # full merged selectedLanguages list) to DynamoDB.
+    if report_config:
+        try:
+            # Keep selectedLanguages in sync with what was actually generated.
+            report_config.setdefault('reporting', {})['selectedLanguages'] = selected_languages
+            update_report_config(key, report_config)
+            print("Persisted updated reportConfig with contextLabels to DynamoDB")
+        except Exception as e:
+            print(f"Warning: Failed to persist updated reportConfig: {str(e)}")
 
     # Update database record with COMPLETED status
     try:
@@ -864,6 +903,34 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
             pdf_urls[lang] = lang_s3_key
             if first_upload_key is None:
                 first_upload_key = lang_s3_key
+            # Extract translated UI labels from phrases and store in reportConfig so
+            # the frontend can display section headings, summary label, and policy
+            # checklist category/measure names in the configured language.
+            try:
+                phrases = get_phrases(lang)
+                context_labels = {
+                    # Report settings section headings
+                    'City context': phrases.get('City context', 'City context'),
+                    'Demographics and health equity': phrases.get('Demographics and health equity', 'Demographics and health equity'),
+                    'Environmental disaster context': phrases.get('Environmental disaster context', 'Environmental disaster context'),
+                    'Levels of government': phrases.get('Levels of government', 'Levels of government'),
+                    'executive_summary': phrases.get('executive_summary', 'Summary'),
+                    # Policy checklist table column headers
+                    'Policy identified': phrases.get('Policy identified', 'Identified'),
+                    'Aligns with healthy cities principles': phrases.get('Aligns with healthy cities principles', 'Aligns'),
+                    'Measurable target': phrases.get('Measurable target', 'Measurable target'),
+                }
+                # Add translations for all policy category names and measure names
+                for category, measures in ghsci_policies['Checklist'].items():
+                    context_labels[category] = phrases.get(category, category)
+                    for measure in measures:
+                        context_labels[measure] = phrases.get(measure, measure)
+                if report_config is None:
+                    report_config = {}
+                report_config.setdefault('reporting', {}).setdefault('languages', {}).setdefault(lang, {})['contextLabels'] = context_labels
+                print(f"Stored contextLabels for language '{lang}'")
+            except Exception as label_err:
+                print(f"Warning: Could not extract contextLabels for language '{lang}': {label_err}")
         except Exception as e:
             print(f"Warning: Failed to generate/upload PDF for language '{lang}': {str(e)}")
             import traceback as _tb
@@ -874,6 +941,16 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
         raise RuntimeError("No PDF reports were successfully generated for any language")
 
     primary_url = pdf_urls.get('English', first_upload_key)
+
+    # Persist updated reportConfig (now containing contextLabels per language and the
+    # full merged selectedLanguages list) to DynamoDB.
+    if report_config:
+        try:
+            report_config.setdefault('reporting', {})['selectedLanguages'] = selected_languages
+            update_report_config(synthetic_key, report_config)
+            print("Persisted updated reportConfig with contextLabels to DynamoDB")
+        except Exception as e:
+            print(f"Warning: Failed to persist updated reportConfig: {str(e)}")
 
     # Mark as COMPLETED.
     try:

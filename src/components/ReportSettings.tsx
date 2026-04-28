@@ -26,6 +26,7 @@ export interface ReportConfig {
             summary?: string;
           }>;
         }>;
+        contextLabels?: Record<string, string>;
       };
     };
     custom_text_box_fontsize?: number; // Optional custom font size for report blurb, e.g. 11 for 11px
@@ -397,14 +398,15 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
               }).map((item, idx) => {
                 const key = Object.keys(item)[0];
                 const summary = item[key][0]?.summary || 'Not set';
+                const label = langData.contextLabels?.[key] ?? key;
                 return (
                   <div key={idx} className="summary-item">
-                    <strong>{key}:</strong> <div className="summary-text">{summary}</div>
+                    <strong>{label}:</strong> <div className="summary-text">{summary}</div>
                   </div>
                 );
               })}
               <div className="summary-item">
-                <strong>Summary:</strong>
+                <strong>{langData.contextLabels?.['executive_summary'] ?? 'Summary'}:</strong>
                 <div className="summary-text">{langData.summary_policy || 'Not set'}</div>
               </div>
             </div>
@@ -484,9 +486,10 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
           const key = Object.keys(item)[0];
           const data = item[key][0];
           const actualIdx = (langData.context || []).findIndex(ctx => Object.keys(ctx)[0] === key);
+          const label = langData.contextLabels?.[key] ?? key;
           return (
             <label key={actualIdx} className="settings-field">
-              <span>{key}</span>
+              <span>{label}</span>
               <textarea
                 rows={3}
                 value={data?.summary || ''}
@@ -502,7 +505,7 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
         })}
 
         <label className="settings-field">
-          <span>Summary</span>
+          <span>{langData.contextLabels?.['executive_summary'] ?? 'Summary'}</span>
           <textarea
             rows={4}
             value={langData.summary_policy || ''}

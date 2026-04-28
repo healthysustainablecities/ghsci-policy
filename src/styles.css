@@ -1462,6 +1462,33 @@ blockquote {
   padding: 8px 0;
 }
 
+.checklist-lang-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.checklist-lang-btn {
+  padding: 4px 12px;
+  border: 1px solid #6f42c1;
+  border-radius: 14px;
+  background: #fff;
+  color: #6f42c1;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.checklist-lang-btn:hover {
+  background: #f3eeff;
+}
+
+.checklist-lang-btn.active {
+  background: #6f42c1;
+  color: #fff;
+}
+
 .checklist-indicator {
   margin-bottom: 20px;
 }

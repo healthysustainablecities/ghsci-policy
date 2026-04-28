@@ -82,6 +82,28 @@ const parsePolicyData = (
   }
 };
 
+const parseReportLanguages = (
+  report: Schema["PolicyReport"]["type"]
+): { selectedLanguages: string[]; contextLabels: (lang: string) => Record<string, string> } => {
+  try {
+    let cfg: any = report.reportConfig;
+    while (typeof cfg === 'string') cfg = JSON.parse(cfg);
+    const selected: string[] = cfg?.reporting?.selectedLanguages ?? ['English'];
+    const langs: Record<string, any> = cfg?.reporting?.languages ?? {};
+    return {
+      selectedLanguages: selected.length ? selected : ['English'],
+      contextLabels: (lang: string) => {
+        let cl = langs[lang]?.contextLabels;
+        if (!cl) return {};
+        if (typeof cl === 'string') { try { cl = JSON.parse(cl); } catch { return {}; } }
+        return cl as Record<string, string>;
+      },
+    };
+  } catch {
+    return { selectedLanguages: ['English'], contextLabels: () => ({}) };
+  }
+};
+
 const parseReportMeta = (
   report: Schema["PolicyReport"]["type"]
 ): { city: string | null; country: string | null; reviewer: string | null; year: string | null } => {
@@ -230,6 +252,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
   const [showForm, setShowForm] = useState(false);
   const [editingIncomplete, setEditingIncomplete] = useState<Schema["PolicyReport"]["type"] | null>(null);
   const [pdfMenu, setPdfMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [resultsLang, setResultsLang] = useState<string>('English');
   const pdfMenuCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchedS3KeysRef = useRef<Set<string>>(new Set());
   const client = generateClient<Schema>();
@@ -243,6 +266,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
       setExpandedIndicator(null);
       setExpandedMeasure(null);
       setHoveredMeasure(null);
+      setResultsLang('English');
     }
   }, [selectedReport?.id]);
 
@@ -955,7 +979,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                       }
                     }}
                     className="btn-icon"
-                    title="Reset stuck processing"
+                    title="Cancel"
                   >⏹️</button>
                 </div>
               )}
@@ -1068,6 +1092,9 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
         const meta = parseReportMeta(selectedReport);
         const policyData = parsePolicyData(selectedReport);
         const scores = computeScores(policyData);
+        const { selectedLanguages: reportLangs, contextLabels: getContextLabels } = parseReportLanguages(selectedReport);
+        const labels = getContextLabels(resultsLang);
+        const t = (key: string, fallback: string) => labels[key] || fallback;
         const titleLine = (meta.city && meta.country)
           ? `${meta.city}, ${meta.country}`
           : meta.city || meta.country || selectedReport.fileName;
@@ -1136,15 +1163,28 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
             {/* Checklist tables */}
             {policyData && (
               <div className="checklist-section" translate="no" onMouseLeave={() => setHoveredMeasure(null)}>
+                {/* Language toggle — only shown when multiple languages are configured */}
+                {reportLangs.length > 1 && (
+                  <div className="checklist-lang-toggle">
+                    {reportLangs.map(lang => (
+                      <button
+                        key={lang}
+                        className={`checklist-lang-btn${resultsLang === lang ? ' active' : ''}`}
+                        onClick={() => { setResultsLang(lang); setExpandedIndicator(null); setExpandedMeasure(null); }}
+                      >{lang}</button>
+                    ))}
+                  </div>
+                )}
                 {Object.entries(policyData).filter(([k]) => !k.startsWith('_')).map(([indicator, measures]) => {
                   const isOpen = expandedIndicator === indicator;
+                  const indicatorLabel = t(indicator, indicator);
                   return (
                     <div key={indicator} className="checklist-indicator">
                       <h4
                         className={`checklist-indicator-title checklist-indicator-toggle${isOpen ? ' is-open' : ''}`}
                         onClick={() => { setExpandedIndicator(isOpen ? null : indicator); setExpandedMeasure(null); setHoveredMeasure(null); }}
                       >
-                        {indicator}
+                        {indicatorLabel}
                         <span className="accordion-chevron">{isOpen ? '▲' : '▼'}</span>
                       </h4>
                       {isOpen && (
@@ -1152,9 +1192,9 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                           <thead>
                             <tr>
                               <th className="col-measure">Measure</th>
-                              <th className="col-score">Identified</th>
-                              <th className="col-score">Aligns</th>
-                              <th className="col-score">Measurable</th>
+                              <th className="col-score">{t('Policy identified', 'Identified')}</th>
+                              <th className="col-score">{t('Aligns with healthy cities principles', 'Aligns')}</th>
+                              <th className="col-score">{t('Measurable target', 'Measurable')}</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1164,6 +1204,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                               const hasDetail = policies && policies.length > 0;
                               const measureKey = `${indicator}::${measure}`;
                               const isExpanded = expandedMeasure === measureKey;
+                              const measureLabel = t(measure, measure);
                               return (
                                 <React.Fragment key={measure}>
                                   <tr
@@ -1174,7 +1215,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                                     onMouseMove={hasDetail ? (e) => setHoveredMeasure(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null) : undefined}
                                   >
                                     <td className={`col-measure${hasDetail ? ' col-measure-clickable' : ''}`}>
-                                      {measure}
+                                      {measureLabel}
                                       {hasDetail && <span className="measure-detail-hint">ⓘ</span>}
                                     </td>
                                     <td className={`col-score ${cellClass(typedVals.identified)}`}>{typedVals.identified}</td>
