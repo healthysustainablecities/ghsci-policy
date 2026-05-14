@@ -1,5 +1,5 @@
 title: "GHSCI Policy"
-description: "Analyse and report on policy indicators for healthy and sustainable cities in different languages online.  A tool designed to support participation in the Global Observatory of Healthy and Sustainable Cities' [1000 Cities Challenge](https://www.healthysustainablecities.org/)."
+description: "Analyse and report on policy indicators for healthy and sustainable cities in different languages online.  A tool designed to support participation in the Global Observatory of Healthy and Sustainable Cities' <a href='https://www.healthysustainablecities.org'>1000 Cities Challenge]</a>."
 markdown: kramdown
 theme: jekyll-theme-minimal
 show_downloads: false
