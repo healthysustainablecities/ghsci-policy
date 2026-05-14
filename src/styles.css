@@ -15,6 +15,36 @@ p {
   font-weight: 300;
 }
 
+/* .main-container {
+  position: relative;
+  min-height: 100vh;
+} */
+
+/* Fixed footer logo in bottom-left */
+.app-footer {
+  position: relative;
+  left: 0;
+  bottom: 0;
+  padding: 50px 12px;
+  z-index: 100; /* above content but below modals if needed */
+  opacity: 0.8;
+}
+
+/* For screens >= 1760px */
+@media (min-width: 1760px) {
+  .app-footer {
+    position: fixed;
+    padding: 15px 15px;
+    left: 0;
+    bottom: 0;
+  }
+}
+
+.footer-logo {
+  height: 40px;      /* adjust as needed */
+  width: auto;
+}
+
 .actions {
   background: rgb(255, 255, 255, 0.6);
   display: inline-block;

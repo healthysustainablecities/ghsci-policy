@@ -612,6 +612,14 @@ function App() {
       )}
 
       <FeedbackChat />
+
+      <footer className="app-footer">
+        <img
+          src="/PB-RACE-BLUE-WIDE-1.svg"
+          alt="RMIT RACE logo"
+          className="footer-logo"
+        />
+      </footer>
     </main>
   );
 }
