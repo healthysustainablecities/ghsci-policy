@@ -4,4 +4,4 @@ In May 2026, we launched our prototype [GHSCI Policy](https://main.d2df0791184z4
 
 Whether completing the form online, or using the Excel spreadsheet for your analysis, the policy analysis directions provided in the [GHSCI wiki](https://healthysustainablecities.github.io/global-indicators/1.-Policy-Indicators) will guide you on getting started.
 
-<img width="702" height="512" alt="image" src="https://github.com/user-attachments/assets/0bf1d140-77ea-49a1-a6c0-17bb69534f90" />
+<img alt="image" src="https://github.com/user-attachments/assets/0bf1d140-77ea-49a1-a6c0-17bb69534f90" />
