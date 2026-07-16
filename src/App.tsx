@@ -7,6 +7,7 @@ import { ReportsList } from './components/ReportsList';
 import FeedbackChat from './components/feedback_chat';
 import FeedbackGallery from './components/feedback_gallery';
 import type { FormData as PolicyFormData } from './components/PolicyForm';
+import { userStoragePath } from './lib/storagePaths';
 import outputs from '../amplify_outputs.json';
 import './styles.css';
 
@@ -290,8 +291,7 @@ function App() {
       if (!response.ok) throw new Error(`Failed to fetch example file: ${response.statusText}`);
       const blob = await response.blob();
       const file = new File([blob], exampleFileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const username = (user?.username || 'unknown').replace(/[^a-zA-Z0-9-]/g, '').substring(0, 50);
-      const fileKey = `public/${username}/${exampleFileName}`;
+      const fileKey = await userStoragePath(exampleFileName);
       await uploadData({ path: fileKey, data: file, options: { contentType: file.type } }).result;
       await handleUploadComplete(exampleFileName, file.size, fileKey);
     } catch (error) {
@@ -428,8 +428,7 @@ function App() {
       const city = cd?.city || 'City';
       const country = cd?.country || '';
       const timestamp = Date.now();
-      const username = (user?.username || 'unknown').replace(/[^a-zA-Z0-9-]/g, '').substring(0, 50);
-      const syntheticKey = `public/${username}/form-${timestamp}.xlsx`;
+      const syntheticKey = await userStoragePath(`form-${timestamp}.xlsx`);
       const fileName = `Policy audit - ${city} (${new Date().getFullYear()}).xlsx`;
       const bucketName = outputs.storage?.bucket_name;
 

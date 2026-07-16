@@ -32,11 +32,27 @@ const processReportFunctionHandler = new Function(dataStack, 'ProcessPolicyRepor
   },
 });
 
-// Add S3 permissions using wildcard to avoid circular dependency
+// Add S3 permissions using wildcard to avoid circular dependency.
+// Full access is scoped to the caller's own identity prefix via the
+// ${cognito-identity.amazonaws.com:sub} IAM policy variable (the literal
+// string is intentional — IAM resolves it per-request to the identity ID).
 backend.auth.resources.authenticatedUserIamRole.addToPrincipalPolicy(
   new PolicyStatement({
     effect: Effect.ALLOW,
     actions: ['s3:PutObject', 's3:GetObject', 's3:DeleteObject'],
+    resources: [
+      'arn:aws:s3:::*amplify*policy*storage*/private/${cognito-identity.amazonaws.com:sub}/*'
+    ],
+  })
+);
+
+// Transitional: read-only access to legacy pre-isolation objects
+// (public/{username}/... and public/reports/...) so existing reports keep
+// working. Remove once legacy data is migrated (see STORAGE_MIGRATION.md).
+backend.auth.resources.authenticatedUserIamRole.addToPrincipalPolicy(
+  new PolicyStatement({
+    effect: Effect.ALLOW,
+    actions: ['s3:GetObject'],
     resources: [
       'arn:aws:s3:::*amplify*policy*storage*/public/*'
     ],
