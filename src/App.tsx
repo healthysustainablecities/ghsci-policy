@@ -353,6 +353,7 @@ function App() {
           formData: JSON.stringify(formData),
           bucket: bucketName,
           syntheticKey: report.fileKey,
+          recordId: report.id,
           reportConfig: typeof report.reportConfig === 'string'
             ? report.reportConfig
             : JSON.stringify(report.reportConfig),
@@ -370,8 +371,9 @@ function App() {
         // Standard xlsx report: trigger re-processing of the existing file
         const result = await client.mutations.triggerReportProcessing({
           fileKey: report.fileKey,
-          reportConfig: typeof report.reportConfig === 'string' 
-            ? report.reportConfig 
+          recordId: report.id,
+          reportConfig: typeof report.reportConfig === 'string'
+            ? report.reportConfig
             : JSON.stringify(report.reportConfig),
           bucket: bucketName,
         });
@@ -481,7 +483,7 @@ function App() {
         },
       };
 
-      await client.models.PolicyReport.create({
+      const { data: createdReport } = await client.models.PolicyReport.create({
         fileName,
         fileKey: syntheticKey,
         status: 'PROCESSING',
@@ -495,6 +497,7 @@ function App() {
         formData: JSON.stringify(formData),
         bucket: bucketName,
         syntheticKey,
+        recordId: createdReport?.id,
         reportConfig: JSON.stringify(reportConfig),
       });
 

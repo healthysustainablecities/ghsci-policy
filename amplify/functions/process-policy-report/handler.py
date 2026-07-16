@@ -9,8 +9,9 @@ import json
 import re
 import time
 import traceback
+from boto3.dynamodb.conditions import Key
 from urllib.parse import unquote_plus
-from datetime import datetime
+from datetime import datetime, timezone
 from ghsci import (
     generate_online_policy_report,
     generate_online_policy_report_from_form_data,
@@ -158,22 +159,23 @@ def handler(event, context):
         form_data = event['formData']
         bucket = event.get('bucket', os.environ.get('STORAGE_BUCKET', ''))
         synthetic_key = event.get('syntheticKey', '')
+        record_id = event.get('recordId') or None
         report_config = event.get('reportConfig', None)
         if report_config and isinstance(report_config, str):
             try:
                 report_config = json.loads(report_config)
             except json.JSONDecodeError:
                 report_config = None
-        print(f"Form submission path: bucket={bucket}, synthetic_key={synthetic_key}, has_report_config={report_config is not None}")
+        print(f"Form submission path: bucket={bucket}, synthetic_key={synthetic_key}, record_id={record_id}, has_report_config={report_config is not None}")
         try:
-            process_form_submission(bucket, form_data, synthetic_key, report_config)
+            process_form_submission(bucket, form_data, synthetic_key, report_config, record_id=record_id)
             return {'statusCode': 200, 'body': json.dumps({'message': 'Form processed successfully'})}
         except Exception as e:
             error_message = f"{type(e).__name__}: {str(e)}"
             print(f'Form processing error: {error_message}')
             traceback.print_exc()
             try:
-                update_report_status(synthetic_key, 'FAILED', error_message=error_message[:4000])
+                update_report_status(synthetic_key, 'FAILED', error_message=error_message[:4000], record_id=record_id)
             except Exception:
                 pass
             return {'statusCode': 500, 'body': json.dumps({'error': error_message})}
@@ -200,7 +202,11 @@ def handler(event, context):
     
     # Extract custom reportConfig if available (from manual trigger)
     report_config = event.get('reportConfig', None)
-    
+
+    # Record id is present on synthetic events from the trigger-processing Lambda;
+    # genuine EventBridge S3 events won't have it (lookup falls back to fileKey).
+    record_id = event.get('recordId') or None
+
     # Parse reportConfig if it's a JSON string
     if report_config and isinstance(report_config, str):
         try:
@@ -211,7 +217,7 @@ def handler(event, context):
             report_config = None
 
     try:
-        process_report(bucket, key, report_config)
+        process_report(bucket, key, report_config, record_id=record_id)
         return {
             'statusCode': 200,
             'body': json.dumps({'message': 'Processing completed successfully'})
@@ -234,7 +240,7 @@ def handler(event, context):
         try:
             display_error = error_message[:4000]
             print(f"Updating status to FAILED with error: {display_error}")
-            update_report_status(key, 'FAILED', error_message=display_error)
+            update_report_status(key, 'FAILED', error_message=display_error, record_id=record_id)
             print("Status updated successfully to FAILED")
         except Exception as update_error:
             print(f"Failed to update status to FAILED: {str(update_error)}")
@@ -272,9 +278,9 @@ def handler(event, context):
             
             # Limit error message length for database (DynamoDB has size limits)
             display_error = error_message[:4000] if len(error_message) > 4000 else error_message
-            
+
             print(f"Updating status to FAILED with error: {display_error}")
-            update_report_status(key, 'FAILED', error_message=display_error)
+            update_report_status(key, 'FAILED', error_message=display_error, record_id=record_id)
             print("Status updated successfully to FAILED")
         except Exception as update_error:
             print(f"Failed to update status to FAILED: {str(update_error)}")
@@ -295,111 +301,175 @@ def get_table():
         raise ValueError("POLICY_REPORT_TABLE environment variable not set")
     return dynamodb.Table(table_name)
 
-def update_report_status(file_key, status, pdf_url=None, error_message=None, pdf_urls=None):
-    """Update the PolicyReport record in DynamoDB with retry logic"""
-    max_retries = 5
-    retry_delay = 1  # Start with 1 second
-    
-    print(f"update_report_status called with:")
-    print(f"  file_key: {file_key}")
-    print(f"  status: {status}")
-    print(f"  pdf_url: {pdf_url}")
-    print(f"  pdf_urls: {pdf_urls}")
-    print(f"  error_message: {error_message}")
-    print(f"  error_message type: {type(error_message)}")
-    print(f"  error_message repr: {repr(error_message)}")
-    
+def _aws_datetime_now():
+    """Current UTC time formatted for AWS Amplify (ISO 8601 with milliseconds and Z)"""
+    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+
+# Cached name of the fileKey GSI; the sentinel distinguishes "not yet checked"
+# from "checked, table has no such index" (None).
+_FILE_KEY_INDEX_UNSET = object()
+_file_key_index = _FILE_KEY_INDEX_UNSET
+
+def _get_file_key_index(table):
+    """
+    Discover (and cache) the name of the GSI whose partition key is 'fileKey'.
+    Returns None if the table has no such index (e.g. before the schema update
+    adding it has been deployed), so callers can fall back to a scan.
+    """
+    global _file_key_index
+    if _file_key_index is not _FILE_KEY_INDEX_UNSET:
+        return _file_key_index
+    try:
+        description = table.meta.client.describe_table(TableName=table.table_name)
+        for gsi in description['Table'].get('GlobalSecondaryIndexes') or []:
+            hash_keys = [k['AttributeName'] for k in gsi['KeySchema'] if k['KeyType'] == 'HASH']
+            if hash_keys == ['fileKey']:
+                _file_key_index = gsi['IndexName']
+                print(f"Using fileKey GSI: {_file_key_index}")
+                return _file_key_index
+        _file_key_index = None
+        print("No fileKey GSI found on table; lookups will fall back to paginated scan")
+    except Exception as e:
+        # Don't cache a failed discovery (may be transient or a permissions issue)
+        print(f"Warning: could not describe table to discover fileKey GSI: {e}")
+        return None
+    return _file_key_index
+
+def _lookup_report_record(table, file_key, record_id=None):
+    """
+    Single lookup attempt for a PolicyReport record. Tries, in order:
+    1. Direct get_item when the caller supplied the record id.
+    2. Query on the fileKey GSI when the index exists.
+    3. Paginated scan on fileKey (follows LastEvaluatedKey) as a fallback.
+    Returns the item dict, or None if not found.
+    """
+    if record_id:
+        response = table.get_item(Key={'id': record_id})
+        item = response.get('Item')
+        if item:
+            return item
+        print(f"get_item found no record for id {record_id}; falling back to fileKey lookup")
+
+    index_name = _get_file_key_index(table)
+    if index_name:
+        response = table.query(
+            IndexName=index_name,
+            KeyConditionExpression=Key('fileKey').eq(file_key),
+        )
+        items = response.get('Items', [])
+        return items[0] if items else None
+
+    # Fallback: scan the whole table, following pagination. A single scan page is
+    # capped at 1MB of examined data, so the record may lie beyond the first page.
+    scan_kwargs = {
+        'FilterExpression': 'fileKey = :fk',
+        'ExpressionAttributeValues': {':fk': file_key},
+    }
+    while True:
+        response = table.scan(**scan_kwargs)
+        items = response.get('Items', [])
+        if items:
+            return items[0]
+        last_key = response.get('LastEvaluatedKey')
+        if not last_key:
+            return None
+        scan_kwargs['ExclusiveStartKey'] = last_key
+
+def find_report_record(file_key, record_id=None, max_retries=5, required=True):
+    """
+    Find a PolicyReport record by record id (preferred) or fileKey, retrying with
+    exponential backoff to tolerate the record being created moments after the
+    S3 upload that triggered processing.
+
+    Returns the item dict. If not found after retries: raises ValueError when
+    required=True, otherwise returns None.
+    """
+    retry_delay = 1
+    last_error = None
     for attempt in range(max_retries):
         try:
             table = get_table()
-            
-            print(f"S3 fileKey: {file_key}")
-            print(f"Searching database for: {file_key} (attempt {attempt + 1}/{max_retries})")
+            item = _lookup_report_record(table, file_key, record_id=record_id)
+            if item:
+                return item
+            print(f"No record found for fileKey: {file_key} (attempt {attempt + 1}/{max_retries})")
+        except Exception as e:
+            last_error = e
+            print(f"Lookup error for fileKey {file_key} (attempt {attempt + 1}/{max_retries}): {e}")
+        if attempt < max_retries - 1:
+            time.sleep(retry_delay)
+            retry_delay *= 2  # Exponential backoff
+    message = f"Record not found for fileKey: {file_key}"
+    if last_error:
+        message += f" (last error: {last_error})"
+    if required:
+        raise ValueError(message)
+    print(message)
+    return None
 
-            # Find the record by matching the full file key
-            response = table.scan(
-                FilterExpression='fileKey = :fk',
-                ExpressionAttributeValues={':fk': file_key}
-            )
-            
-            print(f"Scan response: {response}")
+def update_report_status(file_key, status, pdf_url=None, error_message=None, pdf_urls=None, record_id=None):
+    """Update the PolicyReport record in DynamoDB, locating it via find_report_record()"""
+    print(f"update_report_status called with:")
+    print(f"  file_key: {file_key}")
+    print(f"  record_id: {record_id}")
+    print(f"  status: {status}")
+    print(f"  pdf_url: {pdf_url}")
+    print(f"  pdf_urls: {pdf_urls}")
+    print(f"  error_message repr: {repr(error_message)}")
 
-            if not response.get('Items'):
-                if attempt < max_retries - 1:
-                    print(f"No record found for fileKey: {file_key}, retrying in {retry_delay}s...")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
-                    continue
-                else:
-                    print(f"No record found for fileKey: {file_key} after {max_retries} attempts")
-                    raise ValueError(f"Record not found for fileKey: {file_key}")
+    item = find_report_record(file_key, record_id=record_id)
+    target_id = item['id']
+    print(f"Found record: {target_id}")
 
-            item = response['Items'][0]
-            record_id = item['id']
-            
-            print(f"Found record: {record_id}")
+    # Build update expression
+    update_expr = 'SET #status = :status, updatedAt = :updatedAt'
+    expr_names = {'#status': 'status'}
+    aws_datetime = _aws_datetime_now()
+    expr_values = {
+        ':status': status,
+        ':updatedAt': aws_datetime
+    }
 
-            # Build update expression
-            update_expr = 'SET #status = :status, updatedAt = :updatedAt'
-            expr_names = {'#status': 'status'}
-            
-            # Format datetime for AWS Amplify (ISO 8601 with milliseconds and Z)
-            now = datetime.utcnow()
-            aws_datetime = now.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'  # Trim to milliseconds and add Z
-            
-            expr_values = {
-                ':status': status,
-                ':updatedAt': aws_datetime
-            }
+    if status == 'PROCESSING':
+        update_expr += ', processedAt = :processedAt'
+        expr_values[':processedAt'] = aws_datetime
+    elif status == 'COMPLETED':
+        update_expr += ', completedAt = :completedAt'
+        expr_values[':completedAt'] = aws_datetime
+        if pdf_url:
+            update_expr += ', pdfUrl = :pdfUrl'
+            expr_values[':pdfUrl'] = pdf_url
+        if pdf_urls:
+            update_expr += ', pdfUrls = :pdfUrls'
+            expr_values[':pdfUrls'] = json.dumps(pdf_urls)
+    elif status == 'FAILED':
+        if error_message:
+            print(f"Adding error message to update: {repr(error_message)}")
+            update_expr += ', errorMessage = :errorMessage'
+            expr_values[':errorMessage'] = str(error_message)  # Ensure it's a string
+        else:
+            print("WARNING: No error message provided for FAILED status!")
 
-            if status == 'PROCESSING':
-                update_expr += ', processedAt = :processedAt'
-                expr_values[':processedAt'] = aws_datetime
-            elif status == 'COMPLETED':
-                update_expr += ', completedAt = :completedAt'
-                expr_values[':completedAt'] = aws_datetime
-                if pdf_url:
-                    update_expr += ', pdfUrl = :pdfUrl'
-                    expr_values[':pdfUrl'] = pdf_url
-                if pdf_urls:
-                    update_expr += ', pdfUrls = :pdfUrls'
-                    expr_values[':pdfUrls'] = json.dumps(pdf_urls)
-            elif status == 'FAILED':
-                if error_message:
-                    print(f"Adding error message to update: {repr(error_message)}")
-                    update_expr += ', errorMessage = :errorMessage'
-                    expr_values[':errorMessage'] = str(error_message)  # Ensure it's a string
-                else:
-                    print("WARNING: No error message provided for FAILED status!")
+    print(f"Updating with expression: {update_expr}")
+    print(f"Expression values: {expr_values}")
 
-            # Update the record
-            print(f"Updating with expression: {update_expr}")
-            print(f"Expression names: {expr_names}")
-            print(f"Expression values: {expr_values}")
-            
-            update_response = table.update_item(
-                Key={'id': record_id},
+    # Retry the update itself against transient DynamoDB errors
+    max_retries = 3
+    retry_delay = 1
+    for attempt in range(max_retries):
+        try:
+            table = get_table()
+            table.update_item(
+                Key={'id': target_id},
                 UpdateExpression=update_expr,
                 ExpressionAttributeNames=expr_names,
                 ExpressionAttributeValues=expr_values,
-                ReturnValues='ALL_NEW'
             )
-            
-            print(f"Update response: {update_response}")
-            print(f"Successfully updated record {record_id} to status {status}")
-            
-            # Verify the error message was actually set
-            if status == 'FAILED' and error_message:
-                updated_item = update_response.get('Attributes', {})
-                stored_error = updated_item.get('errorMessage')
-                print(f"Verification - stored errorMessage: {repr(stored_error)}")
-            
+            print(f"Successfully updated record {target_id} to status {status}")
             return  # Success, exit retry loop
-            
         except Exception as e:
             if attempt == max_retries - 1:
                 print(f"Error updating status after {max_retries} attempts: {str(e)}")
-                import traceback
                 print(f"Traceback: {traceback.format_exc()}")
                 raise
             else:
@@ -407,79 +477,47 @@ def update_report_status(file_key, status, pdf_url=None, error_message=None, pdf
                 time.sleep(retry_delay)
                 retry_delay *= 2
 
-def update_report_config(file_key, report_config):
-    """Update the reportConfig field in the PolicyReport record with retry logic"""
-    max_retries = 5
-    retry_delay = 1
-    
-    for attempt in range(max_retries):
-        try:
-            table = get_table()
-            
-            # Find the record by matching the full file key
-            response = table.scan(
-                FilterExpression='fileKey = :fk',
-                ExpressionAttributeValues={':fk': file_key}
-            )
-            
-            if not response.get('Items'):
-                if attempt < max_retries - 1:
-                    print(f"No record found for fileKey: {file_key}, retrying in {retry_delay}s...")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2
-                    continue
-                else:
-                    print(f"No record found for fileKey: {file_key} after {max_retries} attempts")
-                    raise ValueError(f"Record not found for fileKey: {file_key}")
+def update_report_config(file_key, report_config, record_id=None):
+    """Update the reportConfig field in the PolicyReport record (non-critical: logs and returns on failure)"""
+    try:
+        item = find_report_record(file_key, record_id=record_id)
+        target_id = item['id']
 
-            item = response['Items'][0]
-            record_id = item['id']
-            
-            print(f"Updating reportConfig for record: {record_id}")
-            print(f"Config to save: {json.dumps(report_config, indent=2)}")
+        print(f"Updating reportConfig for record: {target_id}")
 
-            # Convert config to JSON string for DynamoDB (AWSJSON type expects string)
-            config_json_string = json.dumps(report_config)
+        # Convert config to JSON string for DynamoDB (AWSJSON type expects string)
+        config_json_string = json.dumps(report_config)
 
-            # Check if initialReportConfig already exists
-            # If not, save this as the initial config (for revert functionality)
-            if 'initialReportConfig' not in item or not item.get('initialReportConfig'):
-                print("Setting initialReportConfig (first parse)")
-                update_expression = 'SET reportConfig = :config, initialReportConfig = :config, updatedAt = :updatedAt'
-            else:
-                print("initialReportConfig already exists, only updating reportConfig")
-                update_expression = 'SET reportConfig = :config, updatedAt = :updatedAt'
+        # Check if initialReportConfig already exists
+        # If not, save this as the initial config (for revert functionality)
+        if not item.get('initialReportConfig'):
+            print("Setting initialReportConfig (first parse)")
+            update_expression = 'SET reportConfig = :config, initialReportConfig = :config, updatedAt = :updatedAt'
+        else:
+            print("initialReportConfig already exists, only updating reportConfig")
+            update_expression = 'SET reportConfig = :config, updatedAt = :updatedAt'
 
-            # Update the record with the parsed config
-            update_response = table.update_item(
-                Key={'id': record_id},
-                UpdateExpression=update_expression,
-                ExpressionAttributeValues={
-                    ':config': config_json_string,
-                    ':updatedAt': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
-                },
-                ReturnValues='ALL_NEW'
-            )
-            
-            print(f"Successfully updated reportConfig for record {record_id}")
-            print(f"Updated attributes: {json.dumps(update_response.get('Attributes', {}), indent=2, default=str)}")
-            return  # Success, exit retry loop
-            
-        except Exception as e:
-            if attempt == max_retries - 1:
-                print(f"Error updating reportConfig after {max_retries} attempts: {str(e)}")
-                import traceback
-                print(f"Traceback: {traceback.format_exc()}")
-                # Don't raise - this is not critical to fail the entire process
-            else:
-                print(f"Error on attempt {attempt + 1}, retrying: {str(e)}")
-                time.sleep(retry_delay)
-                retry_delay *= 2
+        # Update the record with the parsed config
+        table = get_table()
+        table.update_item(
+            Key={'id': target_id},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues={
+                ':config': config_json_string,
+                ':updatedAt': _aws_datetime_now()
+            },
+        )
 
-def update_policy_data(file_key, policy_data, scores=None, raw_details=None, max_retries=5):
+        print(f"Successfully updated reportConfig for record {target_id}")
+    except Exception as e:
+        # Don't raise - this is not critical to fail the entire process
+        print(f"Error updating reportConfig: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+
+def update_policy_data(file_key, policy_data, scores=None, raw_details=None, max_retries=5, record_id=None):
     """
     Update the policyData field in the database with policy_data_setup() results.
-    
+
     Args:
         file_key: The S3 file key to identify the record
         policy_data: Dictionary from policy_data_setup() to be stored as JSON
@@ -488,9 +526,9 @@ def update_policy_data(file_key, policy_data, scores=None, raw_details=None, max
         raw_details: Optional dict from get_raw_policy_details(), mapping measure name ->
                      list of raw policy entry dicts for frontend drill-down display.
         max_retries: Maximum number of retry attempts
+        record_id: Optional PolicyReport record id for direct lookup
     """
-    retry_delay = 1
-    
+
     # Convert policy_data to JSON string
     # The policy_data is a dictionary of pandas DataFrames
     # Use .to_json() on each DataFrame
@@ -525,71 +563,43 @@ def update_policy_data(file_key, policy_data, scores=None, raw_details=None, max
     
     print(f"Updating policyData for {file_key}")
     print(f"Policy data size: {len(policy_data_json_string)} bytes")
-    
-    for attempt in range(max_retries):
-        try:
-            table = get_table()
-            
-            # Find the record
-            response = table.scan(
-                FilterExpression='fileKey = :fk',
-                ExpressionAttributeValues={':fk': file_key}
-            )
-            
-            if not response.get('Items'):
-                if attempt < max_retries - 1:
-                    print(f"No record found for fileKey: {file_key}, retrying in {retry_delay}s...")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2
-                    continue
-                else:
-                    print(f"No record found for fileKey: {file_key} after {max_retries} attempts")
-                    return
-            
-            item = response['Items'][0]
-            record_id = item['id']
-            
-            print(f"Updating policyData for record {record_id}")
-            
-            # Update the policyData field
-            update_expression = 'SET policyData = :policyData, updatedAt = :updatedAt'
-            
-            update_response = table.update_item(
-                Key={'id': record_id},
-                UpdateExpression=update_expression,
-                ExpressionAttributeValues={
-                    ':policyData': policy_data_json_string,
-                    ':updatedAt': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
-                },
-                ReturnValues='ALL_NEW'
-            )
-            
-            print(f"Successfully updated policyData for record {record_id}")
-            return  # Success, exit retry loop
-            
-        except Exception as e:
-            if attempt == max_retries - 1:
-                print(f"Error updating policyData after {max_retries} attempts: {str(e)}")
-                import traceback
-                print(f"Traceback: {traceback.format_exc()}")
-                # Don't raise - this is not critical to fail the entire process
-            else:
-                print(f"Error on attempt {attempt + 1}, retrying: {str(e)}")
-                time.sleep(retry_delay)
-                retry_delay *= 2
 
-def process_report(bucket, key, report_config=None):
+    try:
+        item = find_report_record(file_key, record_id=record_id, max_retries=max_retries, required=False)
+        if not item:
+            return
+
+        target_id = item['id']
+        print(f"Updating policyData for record {target_id}")
+
+        table = get_table()
+        table.update_item(
+            Key={'id': target_id},
+            UpdateExpression='SET policyData = :policyData, updatedAt = :updatedAt',
+            ExpressionAttributeValues={
+                ':policyData': policy_data_json_string,
+                ':updatedAt': _aws_datetime_now()
+            },
+        )
+
+        print(f"Successfully updated policyData for record {target_id}")
+    except Exception as e:
+        # Don't raise - this is not critical to fail the entire process
+        print(f"Error updating policyData: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+
+def process_report(bucket, key, report_config=None, record_id=None):
     """
     Download file from S3, process and upload report
     """
-    
+
     print(f"Starting to process: {key}")
     if report_config:
         print(f"Using custom config: {json.dumps(report_config, indent=2)}")
 
     # Update status to PROCESSING
     try:
-        update_report_status(key, 'PROCESSING')
+        update_report_status(key, 'PROCESSING', record_id=record_id)
     except Exception as e:
         raise RuntimeError(f"Failed to update status to PROCESSING: {str(e)}")
 
@@ -632,7 +642,7 @@ def process_report(bucket, key, report_config=None):
             parsed_config = parse_excel_config(checklist_file_path)
             if parsed_config:
                 # Update database with parsed config
-                update_report_config(key, parsed_config)
+                update_report_config(key, parsed_config, record_id=record_id)
                 report_config = parsed_config
                 print(f"Using parsed config: {json.dumps(report_config, indent=2)}")
             else:
@@ -659,7 +669,7 @@ def process_report(bucket, key, report_config=None):
         policy_scores = get_policy_presence_quality_score_dictionary(audit)
         policy_raw_details = get_raw_policy_details(audit)
         if policy_data:
-            update_policy_data(key, policy_data, scores=policy_scores, raw_details=policy_raw_details)
+            update_policy_data(key, policy_data, scores=policy_scores, raw_details=policy_raw_details, record_id=record_id)
             print("Policy data extracted and saved successfully")
         else:
             print("Warning: policy_data_setup returned None")
@@ -771,20 +781,20 @@ def process_report(bucket, key, report_config=None):
         try:
             # Keep selectedLanguages in sync with what was actually generated.
             report_config.setdefault('reporting', {})['selectedLanguages'] = selected_languages
-            update_report_config(key, report_config)
+            update_report_config(key, report_config, record_id=record_id)
             print("Persisted updated reportConfig with contextLabels to DynamoDB")
         except Exception as e:
             print(f"Warning: Failed to persist updated reportConfig: {str(e)}")
 
     # Update database record with COMPLETED status
     try:
-        update_report_status(key, 'COMPLETED', pdf_url=primary_url, pdf_urls=pdf_urls)
+        update_report_status(key, 'COMPLETED', pdf_url=primary_url, pdf_urls=pdf_urls, record_id=record_id)
         print(f"File {key} processed successfully")
     except Exception as e:
         raise RuntimeError(f"Failed to update status to COMPLETED: {str(e)}")
 
 
-def process_form_submission(bucket, form_data, synthetic_key, report_config=None):
+def process_form_submission(bucket, form_data, synthetic_key, report_config=None, record_id=None):
     """
     Handle an online form submission by generating a PDF directly from form data,
     without creating or uploading an intermediate xlsx file.
@@ -793,7 +803,7 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
     xlsx pipeline produces (policy setting dict + audit DataFrame), then fed
     straight into generate_online_policy_report_from_form_data().
     """
-    print(f"process_form_submission called with synthetic_key={synthetic_key}")
+    print(f"process_form_submission called with synthetic_key={synthetic_key}, record_id={record_id}")
 
     # Remove internal _force flag if present (no longer used, but guard against stale clients).
     if isinstance(form_data, dict):
@@ -801,17 +811,10 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
 
     # Duplicate guard: only skip if already COMPLETED.
     try:
-        table = get_table()
-        response = table.scan(
-            FilterExpression='fileKey = :fk',
-            ExpressionAttributeValues={':fk': synthetic_key}
-        )
-        items = response.get('Items', [])
-        if items:
-            status = items[0].get('status', '')
-            if status == 'COMPLETED':
-                print(f"Duplicate trigger detected: record {synthetic_key} already COMPLETED. Skipping.")
-                return
+        existing = find_report_record(synthetic_key, record_id=record_id, max_retries=1, required=False)
+        if existing and existing.get('status', '') == 'COMPLETED':
+            print(f"Duplicate trigger detected: record {synthetic_key} already COMPLETED. Skipping.")
+            return
     except Exception as e:
         print(f"Warning: Could not check for duplicate trigger: {e}")
 
@@ -851,7 +854,7 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
     # Persist report_config to DynamoDB before PDF generation.
     if report_config:
         try:
-            update_report_config(synthetic_key, report_config)
+            update_report_config(synthetic_key, report_config, record_id=record_id)
             print("Persisted report_config to DynamoDB")
         except Exception as e:
             print(f"Warning: Failed to persist report_config to DynamoDB: {e}")
@@ -866,7 +869,7 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
         policy_scores = get_policy_presence_quality_score_dictionary(audit)
         policy_raw_details = get_raw_policy_details(audit)
         if policy_data:
-            update_policy_data(synthetic_key, policy_data, scores=policy_scores, raw_details=policy_raw_details)
+            update_policy_data(synthetic_key, policy_data, scores=policy_scores, raw_details=policy_raw_details, record_id=record_id)
             print("Policy data extracted and saved successfully")
         else:
             print("Warning: policy_data_setup returned None")
@@ -959,7 +962,7 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
             _tb.print_exc()
 
     if not pdf_urls:
-        update_report_status(synthetic_key, 'FAILED', error_message='No PDF reports were successfully generated for any language')
+        update_report_status(synthetic_key, 'FAILED', error_message='No PDF reports were successfully generated for any language', record_id=record_id)
         raise RuntimeError("No PDF reports were successfully generated for any language")
 
     primary_url = pdf_urls.get('English', first_upload_key)
@@ -969,14 +972,14 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
     if report_config:
         try:
             report_config.setdefault('reporting', {})['selectedLanguages'] = selected_languages
-            update_report_config(synthetic_key, report_config)
+            update_report_config(synthetic_key, report_config, record_id=record_id)
             print("Persisted updated reportConfig with contextLabels to DynamoDB")
         except Exception as e:
             print(f"Warning: Failed to persist updated reportConfig: {str(e)}")
 
     # Mark as COMPLETED.
     try:
-        update_report_status(synthetic_key, 'COMPLETED', pdf_url=primary_url, pdf_urls=pdf_urls)
+        update_report_status(synthetic_key, 'COMPLETED', pdf_url=primary_url, pdf_urls=pdf_urls, record_id=record_id)
         print(f"Form submission {synthetic_key} processed successfully")
     except Exception as e:
         raise RuntimeError(f"Failed to update status to COMPLETED: {str(e)}")

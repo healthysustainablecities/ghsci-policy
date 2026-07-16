@@ -62,8 +62,20 @@ const s3Bucket = backend.storage.resources.bucket;
 s3Bucket.grantReadWrite(processReportFunctionHandler);
 
 // Grant Lambda permissions to update DynamoDB table
-backend.data.resources.tables['PolicyReport'].grantReadWriteData(
-  processReportFunctionHandler
+const policyReportTable = backend.data.resources.tables['PolicyReport'];
+policyReportTable.grantReadWriteData(processReportFunctionHandler);
+
+// Explicitly allow querying the fileKey GSI and discovering it via DescribeTable
+// (grantReadWriteData on ITable does not always cover secondary indexes)
+processReportFunctionHandler.addToRolePolicy(
+  new PolicyStatement({
+    effect: Effect.ALLOW,
+    actions: ['dynamodb:Query', 'dynamodb:DescribeTable'],
+    resources: [
+      policyReportTable.tableArn,
+      `${policyReportTable.tableArn}/index/*`,
+    ],
+  })
 );
 
 // Configure trigger-processing function

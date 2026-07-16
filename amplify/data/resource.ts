@@ -27,6 +27,7 @@ const schema = a.schema({
       processedAt: a.datetime(),
       completedAt: a.datetime(),
     })
+    .secondaryIndexes((index) => [index('fileKey')])
     .authorization((allow) => [
       allow.owner()
     ]),
@@ -37,6 +38,7 @@ const schema = a.schema({
       fileKey: a.string().required(),
       reportConfig: a.json(),
       bucket: a.string().required(),
+      recordId: a.string(),
     })
     .returns(a.json())
     .authorization((allow) => [allow.authenticated()])
@@ -49,6 +51,7 @@ const schema = a.schema({
       bucket: a.string().required(),
       syntheticKey: a.string().required(),
       reportConfig: a.json(),
+      recordId: a.string(),
     })
     .returns(a.json())
     .authorization((allow) => [allow.authenticated()])

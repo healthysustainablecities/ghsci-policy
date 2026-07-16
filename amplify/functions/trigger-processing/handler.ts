@@ -5,7 +5,7 @@ const lambdaClient = new LambdaClient({});
 export const handler = async (event: any) => {
   console.log('Trigger processing event:', JSON.stringify(event, null, 2));
 
-  const { fileKey, reportConfig, bucket, formData, syntheticKey } = event.arguments;
+  const { fileKey, reportConfig, bucket, formData, syntheticKey, recordId } = event.arguments;
 
   // Form submission path
   if (formData) {
@@ -23,6 +23,7 @@ export const handler = async (event: any) => {
       bucket: effectiveBucket,
       syntheticKey: syntheticKey || '',
       reportConfig: reportConfig || null,
+      recordId: recordId || null,
     };
 
     try {
@@ -77,7 +78,8 @@ export const handler = async (event: any) => {
           }
         }
       }],
-      reportConfig: reportConfig // Pass custom config
+      reportConfig: reportConfig, // Pass custom config
+      recordId: recordId || null, // Direct DynamoDB lookup when the caller knows the record id
     };
 
     console.log('Invoking process Lambda:', processLambdaArn);
