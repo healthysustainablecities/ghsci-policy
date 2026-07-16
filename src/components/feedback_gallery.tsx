@@ -85,13 +85,24 @@ export const FeedbackGallery: React.FC<FeedbackGalleryProps> = ({ onClose }) => 
     let cancelled = false;
     const load = async () => {
       setLoading(true);
-      const [feedbackRes, adminCheck, userAttrs] = await Promise.all([
-        client.models.Feedback.list(),
+      const listAllFeedback = async () => {
+        // Follow nextToken so results aren't limited to the first ~1MB page.
+        const all: Feedback[] = [];
+        let nextToken: string | null | undefined = undefined;
+        do {
+          const page: { data: unknown[]; nextToken?: string | null } = await client.models.Feedback.list({ nextToken } as any);
+          all.push(...((page.data ?? []) as Feedback[]));
+          nextToken = page.nextToken;
+        } while (nextToken);
+        return all;
+      };
+      const [feedbackItems, adminCheck, userAttrs] = await Promise.all([
+        listAllFeedback(),
         checkIsAdmin(),
         fetchUserAttributes().catch(() => ({} as Record<string, string | undefined>)),
       ]);
       if (!cancelled) {
-        const sorted = [...(feedbackRes.data ?? [])].sort((a, b) =>
+        const sorted = [...feedbackItems].sort((a, b) =>
           new Date(b.datetime ?? 0).getTime() - new Date(a.datetime ?? 0).getTime()
         );
         setItems(sorted);
