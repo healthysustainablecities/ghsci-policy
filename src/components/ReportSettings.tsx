@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { uploadData, getUrl } from 'aws-amplify/storage';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../amplify/data/resource';
+import { userStoragePath } from '../lib/storagePaths';
 
 const client = generateClient<Schema>();
 
@@ -74,11 +75,7 @@ interface ReportSettingsProps {
   onSave: (config: ReportConfig) => Promise<void>;
 }
 
-const sanitizeUserId = (userId: string): string => {
-  return userId.replace(/[^a-zA-Z0-9-]/g, '').substring(0, 50);
-};
-
-export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, onClose, onSave }) => {
+export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, onClose, onSave }) => {
   const [config, setConfig] = useState<ReportConfig>({
     reporting: {
       doi: '',
@@ -220,12 +217,11 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
     reader.readAsDataURL(file);
 
     try {
-      const username = sanitizeUserId(user?.username || 'unknown');
       // Use filename-based key (no timestamp) so re-uploading the same file reuses the same S3 object
-      const key = `${username}/images/${file.name}`;
-      
+      const key = await userStoragePath(`images/${file.name}`);
+
       await uploadData({
-        path: `public/${key}`,
+        path: key,
         data: file,
         options: {
           contentType: file.type
@@ -242,15 +238,15 @@ export const ReportSettings: React.FC<ReportSettingsProps> = ({ report, user, on
             [imageNumber]: {
               ...config.reporting?.images?.[imageNumber],
               file: file.name,
-              s3Key: `public/${key}`
+              s3Key: key
             }
           }
         }
       };
       setConfig(newConfig);
-      
+
       // Update imageUrls for immediate display
-      const { url } = await getUrl({ path: `public/${key}` });
+      const { url } = await getUrl({ path: key });
       setImageUrls(prev => ({
         ...prev,
         [imageNumber]: url.toString()

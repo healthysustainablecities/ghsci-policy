@@ -7,6 +7,7 @@ import type { Schema } from '../../amplify/data/resource';
 import { ReportSettings, type ReportConfig } from './ReportSettings';
 import { PolicyChat } from './PolicyChat';
 import { PolicyForm, type FormData as PolicyFormData } from './PolicyForm';
+import { userStoragePath } from '../lib/storagePaths';
 
 interface ReportsListProps {
   onUploadComplete: (fileName: string, fileSize: number, fileKey: string) => void;
@@ -39,11 +40,6 @@ const getStatusText = (status: string) => {
     case 'INCOMPLETE': return 'Incomplete';
     default: return 'Unknown';
   }
-};
-
-const sanitizeUserId = (userId: string): string => {
-  // Remove special characters and limit length for safe file paths
-  return userId.replace(/[^a-zA-Z0-9-]/g, '').substring(0, 50);
 };
 
 // ── Data helpers ─────────────────────────────────────────────────────────────
@@ -327,13 +323,11 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
         }
 
         try {
-          // Generate S3 key using sanitized username for organization
-          // Format: public/{sanitized-username}/{filename}
-          const username = sanitizeUserId(user?.username || 'unknown');
-          const key = `${username}/${file.name}`;
+          // Per-user isolated S3 key: private/{identityId}/{filename}
+          const key = await userStoragePath(file.name);
 
           await uploadData({
-            path: `public/${key}`,
+            path: key,
             data: file,
             options: {
               contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -341,7 +335,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
           });
 
           // Trigger processing after successful upload (fileName is original, fileKey is user-specific)
-          onUploadComplete(file.name, file.size, `public/${key}`);
+          onUploadComplete(file.name, file.size, key);
         } catch (error) {
           console.error('Upload failed:', error);
           alert(`Upload failed for "${file.name}". Please try again.`);
@@ -784,8 +778,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({ onUploadComplete, onDe
                     fileSize: JSON.stringify(formData).length,
                   });
                 } else {
-                  const username = (user?.username || 'unknown').replace(/[^a-zA-Z0-9-]/g, '').substring(0, 50);
-                  const syntheticKey = `public/${username}/incomplete-${formData.formId}.json`;
+                  const syntheticKey = await userStoragePath(`incomplete-${formData.formId}.json`);
                   await client.models.PolicyReport.create({
                     fileName,
                     fileKey: syntheticKey,

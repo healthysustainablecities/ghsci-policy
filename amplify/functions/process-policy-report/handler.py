@@ -588,6 +588,22 @@ def update_policy_data(file_key, policy_data, scores=None, raw_details=None, max
         print(f"Error updating policyData: {str(e)}")
         print(f"Traceback: {traceback.format_exc()}")
 
+def get_user_report_prefix(key, default_prefix='public/reports'):
+    """
+    Derive the S3 prefix for generated report PDFs from the source file key,
+    so outputs stay within the uploading user's own folder:
+
+        private/{identityId}/checklist.xlsx -> private/{identityId}/reports
+        public/{username}/checklist.xlsx    -> public/{username}/reports
+
+    Falls back to the legacy shared prefix if the key has no folder component.
+    """
+    parent = os.path.dirname(key)
+    if parent:
+        return f'{parent}/reports'
+    return default_prefix
+
+
 def process_report(bucket, key, report_config=None, record_id=None):
     """
     Download file from S3, process and upload report
@@ -622,8 +638,8 @@ def process_report(bucket, key, report_config=None, record_id=None):
     checklist_file_path = f'/tmp/{filename}'
     output_pdf_name = f'{file_basename}.pdf'
     pdf_local_path = f'/tmp/{output_pdf_name}'
-    s3_upload_key = f'public/reports/{output_pdf_name}'
-    
+    s3_upload_key = f'{get_user_report_prefix(key)}/{output_pdf_name}'
+
     print(f"Will upload PDF to: {s3_upload_key}")
     print(f"Processing file: {key} from bucket: {bucket}")
 
@@ -719,7 +735,7 @@ def process_report(bucket, key, report_config=None, record_id=None):
             lang_slug = re.sub(r'[^\w]+', '-', lang).strip('-').lower()
             lang_pdf_name = f'{file_basename}-{lang_slug}.pdf'
             lang_pdf_local = f'/tmp/{lang_pdf_name}'
-            lang_s3_key = f'public/reports/{lang_pdf_name}'
+            lang_s3_key = f'{get_user_report_prefix(key)}/{lang_pdf_name}'
             lang_pdf.output(lang_pdf_local)
             print(f"PDF written to {lang_pdf_local}")
             s3_client.upload_file(lang_pdf_local, bucket, lang_s3_key)
@@ -848,7 +864,7 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
 
     output_pdf_name = f'{file_basename}.pdf'
     pdf_local_path = f'/tmp/{output_pdf_name}'
-    s3_upload_key = f'public/reports/{output_pdf_name}'
+    s3_upload_key = f'{get_user_report_prefix(synthetic_key)}/{output_pdf_name}'
     print(f"Will upload PDF to: {s3_upload_key}")
 
     # Persist report_config to DynamoDB before PDF generation.
@@ -909,7 +925,7 @@ def process_form_submission(bucket, form_data, synthetic_key, report_config=None
             lang_slug = _re.sub(r'[^\w]+', '-', lang).strip('-').lower()
             lang_pdf_name = f'{file_basename}-{lang_slug}.pdf'
             lang_pdf_local = f'/tmp/{lang_pdf_name}'
-            lang_s3_key = f'public/reports/{lang_pdf_name}'
+            lang_s3_key = f'{get_user_report_prefix(synthetic_key)}/{lang_pdf_name}'
             lang_pdf.output(lang_pdf_local)
             print(f"PDF written to {lang_pdf_local}")
             s3_client.upload_file(lang_pdf_local, bucket, lang_s3_key)
