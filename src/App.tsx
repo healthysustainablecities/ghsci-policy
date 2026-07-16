@@ -154,14 +154,40 @@ function App() {
 
   const fetchReports = async () => {
     try {
-      const { data } = await client.models.PolicyReport.list({
-        selectionSet: ['id', 'fileName', 'fileKey', 'status', 'pdfUrl', 'pdfUrls', 'reportTitle', 'collectionDetails', 'policyChecklist', 'reportConfig', 'initialReportConfig', 'policyData', 'fileSize', 'errorMessage', 'uploadedAt', 'processedAt', 'completedAt', 'createdAt', 'updatedAt'],
-      });
+      // Paginate through ALL pages: a single list() call is capped at ~1MB of
+      // scanned data (roughly a dozen of these large records), so without the
+      // nextToken loop only an arbitrary subset of reports is returned.
+      const selectionSet = ['id', 'fileName', 'fileKey', 'status', 'pdfUrl', 'pdfUrls', 'reportTitle', 'collectionDetails', 'policyChecklist', 'reportConfig', 'initialReportConfig', 'policyData', 'fileSize', 'errorMessage', 'uploadedAt', 'processedAt', 'completedAt', 'createdAt', 'updatedAt'];
+      const allItems: Schema["PolicyReport"]["type"][] = [];
+      let nextToken: string | null | undefined = undefined;
+      do {
+        const page: { data: unknown[]; nextToken?: string | null } = await client.models.PolicyReport.list({
+          selectionSet,
+          nextToken,
+        } as any);
+        allItems.push(...((page.data ?? []) as Schema["PolicyReport"]["type"][]));
+        nextToken = page.nextToken;
+      } while (nextToken);
+
       // Deduplicate by id before setting state
-      const deduped = Array.from(new Map(data.map(item => [item.id, item])).values());
-      setReports([...deduped].sort((a, b) =>
-        new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
-      ));
+      const deduped = Array.from(new Map(allItems.filter(item => item != null).map(item => [item.id, item])).values());
+      setReports(prevReports => {
+        const prevMap = new Map(prevReports.map(r => [r.id, r]));
+        // Protect terminal statuses from being downgraded by a stale read racing
+        // with the subscription (same rule as the subscription merge above).
+        const merged = deduped.map(item => {
+          const prev = prevMap.get(item.id);
+          const prevIsTerminal = prev?.status === 'COMPLETED' || prev?.status === 'FAILED';
+          const incomingIsDowngrade = !item.status || item.status === 'PROCESSING' || item.status === 'UPLOADED';
+          if (prevIsTerminal && incomingIsDowngrade && !processingOverrideIds.current.has(item.id)) {
+            return { ...item, status: prev!.status };
+          }
+          return item;
+        });
+        return merged.sort((a, b) =>
+          new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
+        );
+      });
     } catch (error) {
       console.error('Failed to fetch reports:', error);
     }
