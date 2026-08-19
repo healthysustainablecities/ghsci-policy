@@ -335,12 +335,58 @@ def _get_file_key_index(table):
         return None
     return _file_key_index
 
+def _find_records_by_file_key(table, file_key):
+    """
+    Return ALL records sharing a fileKey, via the GSI when available, otherwise
+    a paginated scan (a single page is capped at 1MB of examined data, so both
+    paths must follow LastEvaluatedKey).
+    """
+    items = []
+    index_name = _get_file_key_index(table)
+    if index_name:
+        kwargs = {
+            'IndexName': index_name,
+            'KeyConditionExpression': Key('fileKey').eq(file_key),
+        }
+        while True:
+            response = table.query(**kwargs)
+            items.extend(response.get('Items', []))
+            last_key = response.get('LastEvaluatedKey')
+            if not last_key:
+                return items
+            kwargs['ExclusiveStartKey'] = last_key
+
+    kwargs = {
+        'FilterExpression': 'fileKey = :fk',
+        'ExpressionAttributeValues': {':fk': file_key},
+    }
+    while True:
+        response = table.scan(**kwargs)
+        items.extend(response.get('Items', []))
+        last_key = response.get('LastEvaluatedKey')
+        if not last_key:
+            return items
+        kwargs['ExclusiveStartKey'] = last_key
+
+def _newest_record(items):
+    """
+    Pick the most recently created record. Multiple records can share a fileKey
+    (e.g. an example report re-loaded after an earlier stuck attempt); the newest
+    is the one the user is currently watching in the UI.
+    """
+    if not items:
+        return None
+    if len(items) > 1:
+        print(f"Warning: {len(items)} records share this fileKey; using the most recently created")
+        items = sorted(items, key=lambda i: str(i.get('createdAt') or i.get('uploadedAt') or ''))
+    return items[-1]
+
 def _lookup_report_record(table, file_key, record_id=None):
     """
-    Single lookup attempt for a PolicyReport record. Tries, in order:
-    1. Direct get_item when the caller supplied the record id.
-    2. Query on the fileKey GSI when the index exists.
-    3. Paginated scan on fileKey (follows LastEvaluatedKey) as a fallback.
+    Single lookup attempt for a PolicyReport record. Tries a direct get_item
+    when the caller supplied the record id, then falls back to a fileKey lookup
+    (GSI query, or paginated scan when the index is unavailable), preferring the
+    most recently created record when duplicates share the fileKey.
     Returns the item dict, or None if not found.
     """
     if record_id:
@@ -350,30 +396,36 @@ def _lookup_report_record(table, file_key, record_id=None):
             return item
         print(f"get_item found no record for id {record_id}; falling back to fileKey lookup")
 
-    index_name = _get_file_key_index(table)
-    if index_name:
-        response = table.query(
-            IndexName=index_name,
-            KeyConditionExpression=Key('fileKey').eq(file_key),
-        )
-        items = response.get('Items', [])
-        return items[0] if items else None
+    return _newest_record(_find_records_by_file_key(table, file_key))
 
-    # Fallback: scan the whole table, following pagination. A single scan page is
-    # capped at 1MB of examined data, so the record may lie beyond the first page.
-    scan_kwargs = {
-        'FilterExpression': 'fileKey = :fk',
-        'ExpressionAttributeValues': {':fk': file_key},
-    }
-    while True:
-        response = table.scan(**scan_kwargs)
-        items = response.get('Items', [])
-        if items:
-            return items[0]
-        last_key = response.get('LastEvaluatedKey')
-        if not last_key:
-            return None
-        scan_kwargs['ExclusiveStartKey'] = last_key
+def _fail_superseded_duplicates(file_key, completed_id):
+    """
+    Mark any other non-terminal records sharing this fileKey as FAILED. Duplicates
+    arise when a file is re-uploaded while an older stuck record exists; only the
+    newest record receives the completed report, so without this the older ones
+    would show 'Processing' in the UI forever.
+    """
+    try:
+        table = get_table()
+        for item in _find_records_by_file_key(table, file_key):
+            if item.get('id') == completed_id:
+                continue
+            if item.get('status') in ('COMPLETED', 'FAILED'):
+                continue
+            table.update_item(
+                Key={'id': item['id']},
+                UpdateExpression='SET #status = :status, errorMessage = :msg, updatedAt = :updatedAt',
+                ExpressionAttributeNames={'#status': 'status'},
+                ExpressionAttributeValues={
+                    ':status': 'FAILED',
+                    ':msg': 'Superseded by a newer processing run of the same file — this duplicate record can be deleted.',
+                    ':updatedAt': _aws_datetime_now(),
+                },
+            )
+            print(f"Marked superseded duplicate record {item['id']} as FAILED")
+    except Exception as e:
+        # Non-critical cleanup; never fail the run over it
+        print(f"Warning: could not check for superseded duplicates: {e}")
 
 def find_report_record(file_key, record_id=None, max_retries=5, required=True):
     """
@@ -466,6 +518,10 @@ def update_report_status(file_key, status, pdf_url=None, error_message=None, pdf
                 ExpressionAttributeValues=expr_values,
             )
             print(f"Successfully updated record {target_id} to status {status}")
+            # Self-heal: once a run completes, fail any stale duplicate records
+            # for the same file so they don't show 'Processing' forever.
+            if status == 'COMPLETED':
+                _fail_superseded_duplicates(file_key, target_id)
             return  # Success, exit retry loop
         except Exception as e:
             if attempt == max_retries - 1:
