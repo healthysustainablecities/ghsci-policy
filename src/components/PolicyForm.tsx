@@ -1188,7 +1188,12 @@ function MeasureSection({
     <div className="pf-measure">
       {(
         <div className="pf-measure-body">
-
+          {pg.yesLabel !== null && pg.noLabel !== null && (
+          <div>
+            <p className="pf-step-desc">
+              For each policy identified, enter information according to whether the policy aligns with the principles of healthy and sustainable cities (Yes or No).
+            </p>
+          </div>)}
           {/* ── Flat-entry mode: no principles ─────────────────── */}
           {hasNoPrinciples && (
             <>
@@ -1469,7 +1474,7 @@ function PolicyChecklistStep({
         Policy Checklist ({percentComplete}% complete)
       </h3>
       <p className="pf-step-desc">
-        For each measure, expand to see the Yes &amp; No principles and add policies against the principles they align with. Measures without any policies entered will be scored as not identified.
+        For each indicator, expand to see the policy options and enter relevant policy information. Indicators without any policies entered must be scored as 'No policies identified'.
       </p>
 
       {Object.entries(GHSCI_INDICATORS).map(([indicator, measures]) => {
@@ -1702,7 +1707,6 @@ export function PolicyForm({ onSubmit, onClose, initialData }: PolicyFormProps) 
         <div className="modal-header">
           <button onClick={handleClose} className="btn btn-close">🗙</button>
           <h3 style={{ margin: 0 }}>Complete a new policy audit</h3>
-          <i>In development; feedback welcome!  This is an experimental feature, and while inputs are saved, submission for generating a report does not yet work.</i>
         </div>
 
         {/* Step indicator */}
