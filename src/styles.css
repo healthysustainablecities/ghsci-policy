@@ -46,31 +46,38 @@ p {
 }
 
 .actions {
-  background: rgb(255, 255, 255, 0.6);
-  display: inline-block;
-  padding: 0px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-top: 1em;
-  margin-bottom: 0em;
-  border-radius: 8px;
-
+  margin-bottom: 0;
 }
 
-/* ── About link ──────────────────────────────────────────────────────────── */
+/* ── Action buttons ─────────────────────────────────────────────────────── */
 
 .about-link {
-  background: none;
-  border: none;
-  padding: 0;
-  color: #6f42c1;
-  font-weight: 400;
-  font-size: inherit;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1.5px solid rgba(111, 66, 193, 0.5);
+  border-radius: 20px;
+  padding: 0.4em 1.1em;
+  color: #5927e2;
+  font-weight: 500;
+  font-size: 0.875rem;
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration: none;
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+  white-space: nowrap;
 }
 
 .about-link:hover {
-  color: #4b2d91;
+  background: rgba(255, 255, 255, 1);
+  border-color: #5927e2;
+  color: #3a1e9a;
+}
+
+.about-link:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 blockquote {

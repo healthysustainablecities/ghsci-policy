@@ -548,13 +548,11 @@ function App() {
           </div>
           <h2>Global Healthy and Sustainable City Indicators Policy analysis and reporting tool</h2 >
           <p>A tool to support analysis and reporting of policy indicators for the Global Observatory of Healthy and Sustainable Cities' <a href="https://www.healthysustainablecities.org/1000cities/" target="_blank" rel="noopener noreferrer">1000 Cities Challenge</a>.</p>
-          <p>Developed out of RMIT University's Centre for Urban Research by <a href="https://cur.org.au/people/carl-higgs/" target="_blank" rel="noopener noreferrer">Dr Carl Higgs</a> and <a href="https://cur.org.au/people/dr-melanie-lowe/" target="_blank" rel="noopener noreferrer">Dr Melanie Lowe</a> with the support of <a href="https://www.rmit.edu.au/partner/hubs/race" target="_blank" rel="noopener noreferrer">RMIT's Advanced Cloud Ecosystem Hub</a> and the <a href="https://www.healthysustainablecities.org/" target="_blank" rel="noopener noreferrer">Global Observatory of Healthy and Sustainable Cities</a>.
-          </p>
-          <p>To get started, visit the <a href="https://github.com/healthysustainablecities/global-indicators/wiki/1.-Policy-Indicators" target="_blank" rel="noopener noreferrer">GOHSC Policy Indicators</a> wiki and download the policy checklist Excel (.xlsx) audit tool.  Once the tool has been completed for city or region of interest, drop it in the app to get your city's score and generate a PDF report.</p>
           <div className="actions">
-            <p><button className="about-link" onClick={() => setShowAbout(true)}>Find out more</button></p>
-            <p><button className="about-link" onClick={handleLoadExample} disabled={loadingExample}>{loadingExample ? 'Loading example...' : 'Load an example report'}</button></p>
-            <p><button className="about-link" title="View and track feedback submitted using the feedback widget" onClick={() => setShowFeedbackGallery(true)}>Feedback gallery</button></p>
+            <button className="about-link" onClick={() => window.open('/instructions.html', '_blank', 'noopener,noreferrer')}>Instructions</button>
+            <button className="about-link" onClick={handleLoadExample} disabled={loadingExample}>{loadingExample ? 'Loading example…' : 'Load an example report'}</button>
+            <button className="about-link" title="View and track feedback submitted using the feedback widget" onClick={() => setShowFeedbackGallery(true)}>Feedback gallery</button>
+            <button className="about-link" onClick={() => setShowAbout(true)}>Find out more</button>
           </div>
         </div>
         
